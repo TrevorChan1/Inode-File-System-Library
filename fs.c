@@ -1,10 +1,12 @@
 #include "fs.h"
+#include "disk.h"
 
 // Global variables of disk
 
 struct fd {
     int inode;
     int file_offset;
+    int active;
 };
 struct fd fileDescriptors[32];
 
@@ -24,7 +26,16 @@ TO DO:
 
 // Disk function that creates new disk and initializes global variables
 int make_fs(const char *disk_name){
+    // Only way for code to fail is if it fails to create the disk
+    if (make_disk(disk_name) != 0){
+        printf("ERROR: Unable to create disk with name %s\n", disk_name);
+        return -1;
+    }
 
+    // Initialize file system datastructures
+
+
+    return 0;
 }
 
 // Disk function that mounts an existing virtual disk using a given name
