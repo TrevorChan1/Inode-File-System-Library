@@ -1,18 +1,29 @@
 #include "fs.h"
 #include "disk.h"
+#include <stdint.h>
 
 // Global variables of disk
 
-struct fd {
-    int inode;
-    int file_offset;
-    int active;
+// Superblock
+struct super_block {
+    uint16_t used_block_bitmap_count;
+    uint16_t used_block_bitmap_offset;
+    uint16_t inode_metadata_blocks;
+    uint16_t inode_metadata_offset;
 };
-struct fd fileDescriptors[32];
 
+// inodes
 struct inode {
 
 };
+
+// File descriptors: Contain inode block #, if it's open, and file offset
+struct fd {
+    int open;
+    int inode;
+    int file_offset;
+};
+struct fd fileDescriptors[32];
 
 /*
 TO DO:
@@ -32,7 +43,24 @@ int make_fs(const char *disk_name){
         return -1;
     }
 
-    // Initialize file system datastructures
+    // Initialize file system datastructures:
+
+    // 1. Initialize a superblock with file system metadata and write to disk
+    struct super_block sb;
+    sb.inode_metadata_offset = 1;
+    sb.inode_metadata_blocks = 1;
+    sb.used_block_bitmap_offset = 2;
+    sb.used_block_bitmap_count = 0;
+
+    if (block_write(0, &sb) != 0){
+        printf("ERROR: Failed to write super block to disk\n");
+        return -1;
+    }
+
+    // 2. Set all file descriptors to be closed
+    for (int i = 0; i < 32; i++){
+        fileDescriptors[i].open = 0;
+    }
 
 
     return 0;
