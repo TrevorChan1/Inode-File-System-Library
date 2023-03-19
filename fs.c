@@ -14,14 +14,18 @@ struct super_block {
 
 // inodes
 struct inode {
-
+    uint8_t file_type;
+    uint32_t direct_offset;
+    uint32_t single_direct_offset;
+    uint32_t double_direct_offset;
+    uint16_t file_size;
 };
 
 // File descriptors: Contain inode block #, if it's open, and file offset
 struct fd {
-    int open;
-    int inode;
-    int file_offset;
+    uint8_t open;
+    uint16_t inode;
+    uint16_t file_offset;
 };
 struct fd fileDescriptors[32];
 
@@ -57,9 +61,14 @@ int make_fs(const char *disk_name){
         return -1;
     }
 
-    // 2. Set all file descriptors to be closed
+    // 2. Set up inodes and inode table
+    struct inode inode_table[64];
+
+
+    // 3. Set all file descriptors to be closed
     for (int i = 0; i < 32; i++){
         fileDescriptors[i].open = 0;
+        fileDescriptors[i].file_offset = 0;
     }
 
 
