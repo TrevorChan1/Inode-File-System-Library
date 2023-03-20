@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define NUM_BLOCKS 8192
+
 // Global variables of disk
 
 // Superblock
@@ -38,6 +40,48 @@ struct fd {
 };
 struct fd fileDescriptors[32];
 
+// Bitwise helper function that takes the free block map and returns nth bit (0 or 1)
+int getNdatabit(uint8_t free_block_bitmap[NUM_BLOCKS / 8], int n){
+    // If n is out of block number range, print error and do nothing
+    if (n < 0 || n >= NUM_BLOCKS){
+        printf("ERROR: free block index out of bounds\n");
+        return -1;
+    }
+
+    // Go into the n/8th block, and in that block go to the bit shift bits from the left
+    int arrIndex = n / 8;
+    int shift = n % 8;
+    return ((free_block_bitmap[arrIndex] >> (7 - shift)) & 1);
+}
+
+// Bitwise helper function that takes free block map and sets nth bit (to 0 or 1)
+void setNdatabit(uint8_t * free_block_bitmap[NUM_BLOCKS / 8], int n, int value){
+    // If n is out of block number range, print error and do nothing
+    if (n < 0 || n >= NUM_BLOCKS){
+        printf("ERROR: free block index out of bounds\n");
+        return;
+    }
+
+    // Go into the n/8th block, and in that block go to the bit shift bits from the left
+    int arrIndex = n / 8;
+    int shift = n % 8;
+    uint8_t mask;
+    // If value is gonna set a 1, shift the 1 to the bit number and OR the mask with the number
+    if (value){
+        mask = 1;
+        mask = mask << (7-shift);
+        *free_block_bitmap[arrIndex] = *free_block_bitmap[arrIndex] | mask;
+    }
+    // If value is setting a 0, create mask of 1's and a 0 in the bit place, then AND with number
+    else{
+        mask = 255;
+        mask = (mask >> (7-shift)) & 0;
+        *free_block_bitmap[arrIndex] = *free_block_bitmap[arrIndex] & mask;
+    }
+    
+}
+
+
 // Disk function that creates new disk and initializes global variables
 int make_fs(const char *disk_name){
     // Only way for code to fail is if it fails to create the disk
@@ -69,8 +113,13 @@ int make_fs(const char *disk_name){
         dirEntries[i].is_used = 0;
     }
 
+    // 4. inode free bitmap
+    uint64_t free_inode_bitmap;
 
+    // Data free bitmap
+    uint8_t free_block_bitmap[NUM_BLOCKS / 8];
 
+    // 4. 
 
     // . Set all file descriptors to be closed
     for (int i = 0; i < 32; i++){
@@ -84,60 +133,60 @@ int make_fs(const char *disk_name){
 
 // Disk function that mounts an existing virtual disk using a given name
 int mount_fs(const char *disk_name){
-
+    return 0;
 }
 
 // Disk function that unmounts virtual disk and saves any changes made to file system
 int umount_fs(const char *disk_name){
-
+    return 0;
 }
 
 // File system function that opens file and generates a file descriptor if file name valid
 int fs_open(const char *name){
-
+    return 0;
 }
 
 // File system function that closes file descriptor
 int fs_close(int fd){
-
+    return 0;
 }
 
 // File system function that creates a new empty file of given name
 int fs_create(const char *name){
-
+    return 0;
 }
 
 // File system function that deletes file of given name if exists and is closed
 int fs_delete(const char *name){
-
+    return 0;
 }
 
 // File system function that reads nbytes from file into buf
 int fs_read(int fd, void *buf, size_t nbyte){
-
+    return 0;
 }
 
 // File system function that writes nbytes of buf into file using file descriptor
 int fs_write(int fd, void *buf, size_t nbyte){
-
+    return 0;
 }
 
 // File system function that returns the filesize of given file
 int fs_get_filesize(int fd){
-
+    return 0;
 }
 
 // File system function that creates a NULL terminated array of file names in root directory
 int fs_listfiles(char ***files){
-
+    return 0;
 }
 
 // File system function that sets the file pointer offset of a file descriptor
 int fs_lseek(int fd, off_t offset){
-
+    return 0;
 }
 
 // File system function that truncates bytes (can't extend length)
 int fs_truncate(int fd, off_t length){
-
+    return 0;
 }
