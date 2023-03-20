@@ -1,6 +1,8 @@
 #include "fs.h"
 #include "disk.h"
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 // Global variables of disk
 
@@ -15,10 +17,17 @@ struct super_block {
 // inodes
 struct inode {
     uint8_t file_type;
-    uint32_t direct_offset;
-    uint32_t single_direct_offset;
-    uint32_t double_direct_offset;
     uint16_t file_size;
+    uint32_t direct_offset;
+    uint32_t single_indirect_offset;
+    uint32_t double_indirect_offset;
+};
+
+// Directory Entries
+struct dir_entry {
+    uint8_t is_used;
+    uint8_t inode_number;
+    char name[15];
 };
 
 // File descriptors: Contain inode block #, if it's open, and file offset
@@ -28,16 +37,6 @@ struct fd {
     uint16_t file_offset;
 };
 struct fd fileDescriptors[32];
-
-/*
-TO DO:
-
-- Create file descriptor data type
-- Create inode data type
-- Create freed data bitmap data type
-- 
-
-*/
 
 // Disk function that creates new disk and initializes global variables
 int make_fs(const char *disk_name){
@@ -64,8 +63,16 @@ int make_fs(const char *disk_name){
     // 2. Set up inodes and inode table
     struct inode inode_table[64];
 
+    // 3. Set up directory entries and entry array (can only be 64 at a time)
+    struct dir_entry dirEntries[64];
+    for (int i = 0; i < 32; i++){
+        dirEntries[i].is_used = 0;
+    }
 
-    // 3. Set all file descriptors to be closed
+
+
+
+    // . Set all file descriptors to be closed
     for (int i = 0; i < 32; i++){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
