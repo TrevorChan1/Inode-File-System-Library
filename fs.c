@@ -55,7 +55,7 @@ int getNdatabit(uint8_t free_block_bitmap[NUM_BLOCKS / 8], int n){
 }
 
 // Bitwise helper function that takes free block map and sets nth bit (to 0 or 1)
-void setNdatabit(uint8_t * free_block_bitmap[NUM_BLOCKS / 8], int n, int value){
+void setNdatabit(uint8_t free_block_bitmap[NUM_BLOCKS / 8], int n, int value){
     // If n is out of block number range, print error and do nothing
     if (n < 0 || n >= NUM_BLOCKS){
         printf("ERROR: free block index out of bounds\n");
@@ -70,13 +70,51 @@ void setNdatabit(uint8_t * free_block_bitmap[NUM_BLOCKS / 8], int n, int value){
     if (value){
         mask = 1;
         mask = mask << (7-shift);
-        *free_block_bitmap[arrIndex] = *free_block_bitmap[arrIndex] | mask;
+        free_block_bitmap[arrIndex] = free_block_bitmap[arrIndex] | mask;
     }
     // If value is setting a 0, create mask of 1's and a 0 in the bit place, then AND with number
     else{
         mask = 255;
         mask = (mask >> (7-shift)) & 0;
-        *free_block_bitmap[arrIndex] = *free_block_bitmap[arrIndex] & mask;
+        free_block_bitmap[arrIndex] = free_block_bitmap[arrIndex] & mask;
+    }
+    
+}
+
+// Bitwise helper function that takes the free block map and returns nth bit (0 or 1)
+int getNinodebit(uint64_t * free_inode_bitmap, int n){
+// If n is out of inode range, print error and do nothing
+    if (n < 0 || n >= 64){
+        printf("ERROR: free inode index out of bounds\n");
+        return -1;
+    }
+
+    // Go into the n/8th block, and in that block go to the bit shift bits from the left
+    return ((*free_inode_bitmap >> (64 - n)) & 1);
+}
+
+// Bitwise helper function that takes free block map and sets nth bit (to 0 or 1)
+void setNinodebit(uint8_t * free_inode_block, int n, int value){
+    // If n is out of block number range, print error and do nothing
+    if (n < 0 || n >= 64){
+        printf("ERROR: free inode index out of bounds\n");
+        return;
+    }
+
+    // Go into the n/8th block, and in that block go to the bit shift bits from the left
+
+    uint64_t mask;
+    // If value is gonna set a 1, shift the 1 to the bit number and OR the mask with the number
+    if (value){
+        mask = 1;
+        mask = mask << (63-n);
+        *free_inode_block = *free_inode_block | mask;
+    }
+    // If value is setting a 0, create mask of 1's and a 0 in the bit place, then AND with number
+    else{
+        mask = 92233720367;
+        mask = (mask >> (63-n)) & 0;
+        *free_inode_block = *free_inode_block & mask;
     }
     
 }
@@ -113,11 +151,17 @@ int make_fs(const char *disk_name){
         dirEntries[i].is_used = 0;
     }
 
-    // 4. inode free bitmap
+    // 4. inode free bitmap and initialize to all ones
     uint64_t free_inode_bitmap;
+    for (int i = 0; i < 64; i++){
+        setNinodebit(&free_inode_bitmap, i, 1);
+    }
 
-    // Data free bitmap
+    // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
     uint8_t free_block_bitmap[NUM_BLOCKS / 8];
+    for (int i = 4; i < NUM_BLOCKS; i++){
+        setNdatabit(free_block_bitmap, i, 1);
+    }
 
     // 4. 
 
