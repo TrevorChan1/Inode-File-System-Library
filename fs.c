@@ -15,6 +15,7 @@ struct super_block {
     uint16_t inode_metadata_blocks;
     uint16_t inode_metadata_offset;
 };
+struct super_block curSuper_block;
 
 // inodes
 struct inode {
@@ -24,6 +25,7 @@ struct inode {
     uint32_t single_indirect_offset;
     uint32_t double_indirect_offset;
 };
+struct inode * curTable;
 
 // Directory Entries
 struct dir_entry {
@@ -31,6 +33,7 @@ struct dir_entry {
     uint8_t inode_number;
     char name[15];
 };
+struct dir_entry * curDir;
 
 // File descriptors: Contain inode block #, if it's open, and file offset
 struct fd {
@@ -39,6 +42,10 @@ struct fd {
     uint16_t file_offset;
 };
 struct fd fileDescriptors[32];
+
+// Free bitmaps global variables
+uint64_t curFreeInodes;
+uint8_t * curFreeData;
 
 // Bitwise helper function that takes the free block map and returns nth bit (0 or 1)
 int getNdatabit(uint8_t free_block_bitmap[NUM_BLOCKS / 8], int n){
@@ -94,7 +101,7 @@ int getNinodebit(uint64_t * free_inode_bitmap, int n){
 }
 
 // Bitwise helper function that takes free block map and sets nth bit (to 0 or 1)
-void setNinodebit(uint8_t * free_inode_block, int n, int value){
+void setNinodebit(uint64_t * free_inode_block, int n, int value){
     // If n is out of block number range, print error and do nothing
     if (n < 0 || n >= 64){
         printf("ERROR: free inode index out of bounds\n");
@@ -144,11 +151,23 @@ int make_fs(const char *disk_name){
 
     // 2. Set up inodes and inode table
     struct inode inode_table[64];
+    curTable = inode_table;
+
+    if (block_write(3, inode_table) != 0){
+        printf("ERROR: Failed to write inode table to disk\n");
+        return -1;
+    }
 
     // 3. Set up directory entries and entry array (can only be 64 at a time)
     struct dir_entry dirEntries[64];
     for (int i = 0; i < 32; i++){
         dirEntries[i].is_used = 0;
+    }
+    curDir = dirEntries;
+
+    if (block_write(4, dirEntries) != 0){
+        printf("ERROR: Failed to write directory entry block to disk\n");
+        return -1;
     }
 
     // 4. inode free bitmap and initialize to all ones
@@ -156,21 +175,30 @@ int make_fs(const char *disk_name){
     for (int i = 0; i < 64; i++){
         setNinodebit(&free_inode_bitmap, i, 1);
     }
+    curFreeInodes = free_inode_bitmap;
+
+    if (block_write(1, &free_inode_bitmap) != 0){
+        printf("ERROR: Failed to write inode free bitmap to disk\n");
+        return -1;
+    }
 
     // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
     uint8_t free_block_bitmap[NUM_BLOCKS / 8];
     for (int i = 4; i < NUM_BLOCKS; i++){
         setNdatabit(free_block_bitmap, i, 1);
     }
+    curFreeData = free_block_bitmap;
 
-    // 4. 
+    if (block_write(2, free_block_bitmap) != 0){
+        printf("ERROR: Failed to write data free bitmap to disk\n");
+        return -1;
+    }
 
-    // . Set all file descriptors to be closed
+    // 6. Set all file descriptors to be closed
     for (int i = 0; i < 32; i++){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
     }
-
 
     return 0;
 }
