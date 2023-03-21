@@ -254,28 +254,28 @@ int umount_fs(const char *disk_name){
     // Second, save all metadata to the disk (only need to write superblock once)
 
     // Directory entries, then free allocated memory
-    if (block_write(1, curDir) < 0){
+    if (block_write(1, curDir) != 0){
         printf("ERROR: Failed to write directory entries to disk\n");
         return -1;
     }
     free(curDir);
 
     // Free data bitmap, then free allocated memory
-    if (block_write(2, curFreeData) < 0){
+    if (block_write(2, curFreeData) != 0){
         printf("ERROR: Failed to write free data bitmap to disk\n");
         return -1;
     }
     free(curFreeData);
 
     // Free inode bitmap, then free allocated memory
-    if (block_write(3, curFreeInodes) < 0){
+    if (block_write(3, curFreeInodes) != 0){
         printf("ERROR: Failed to write free inode bitmap to disk\n");
         return -1;
     }
     free(curFreeInodes);
 
     // Inode table, then free allocated memory
-    if (block_write(4, curTable) < 0){
+    if (block_write(4, curTable) != 0){
         printf("ERROR: Failed to write free inode bitmap to disk\n");
         return -1;
     }
