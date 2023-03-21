@@ -15,7 +15,7 @@ struct super_block {
     uint16_t free_data_bitmap;
     uint16_t inode_table;
 };
-struct super_block curSuper_block;
+struct super_block * curSuper_block;
 
 // inodes
 struct inode {
@@ -111,13 +111,13 @@ int make_fs(const char *disk_name){
     // Initialize file system datastructures:
 
     // 1. Initialize a superblock with file system metadata and write to disk
-    struct super_block sb;
-    sb.dentries = 1;
-    sb.free_data_bitmap = 2;
-    sb.free_inode_bitmap = 3;
-    sb.inode_table = 4;
+    curSuper_block = (struct super_block *) malloc(sizeof(struct super_block));
+    curSuper_block->dentries = 1;
+    curSuper_block->free_data_bitmap = 2;
+    curSuper_block->free_inode_bitmap = 3;
+    curSuper_block->inode_table = 4;
 
-    if (block_write(0, &sb) != 0){
+    if (block_write(0, curSuper_block) != 0){
         printf("ERROR: Failed to write super block to disk\n");
         return -1;
     }
@@ -144,7 +144,7 @@ int make_fs(const char *disk_name){
     // 4. inode free bitmap and initialize to all ones (uses uint8 so same functions can be used)
     uint8_t * free_inode_bitmap = (uint8_t *) malloc(8 * sizeof(uint8_t));
     for (int i = 0; i < 64; i++){
-        setNinodebit(free_inode_bitmap, i, 1);
+        setNbit(free_inode_bitmap, 64, i, 1);
     }
     curFreeInodes = free_inode_bitmap;
 
@@ -156,10 +156,11 @@ int make_fs(const char *disk_name){
     // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
     uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
     for (int i = 5; i < NUM_BLOCKS; i++){
-        setNdatabit(free_block_bitmap, i, 1);
+        setNbit(free_block_bitmap, NUM_BLOCKS, i, 1);
     }
+
     for (int j = 0; j < 5; j++){
-        setNdatabit(free_block_bitmap, j, 0);
+        setNbit(free_block_bitmap, NUM_BLOCKS, j, 0);
     }
     curFreeData = free_block_bitmap;
 
@@ -179,6 +180,58 @@ int make_fs(const char *disk_name){
 
 // Disk function that mounts an existing virtual disk using a given name
 int mount_fs(const char *disk_name){
+    // Check if disk exists and, if so, open it
+    if (open_disk(disk_name) < 0)
+        return -1;
+    
+    // Read in super block and dynamically allocate memory for all global metadata datastructures
+
+    // 1. Read in the superblock from the 1st block of the disk
+    curSuper_block = (struct super_block *) malloc(sizeof(struct super_block));
+    if (block_read(0, curSuper_block) < 0){
+        printf("ERROR: Failed to read from superblock\n");
+        return -1;
+    }
+
+    int block_dir = curSuper_block->dentries;
+    int block_freedata = curSuper_block->free_data_bitmap;
+    int block_freeinode = curSuper_block->free_inode_bitmap;
+    int block_inodes = curSuper_block->inode_table;
+
+    // 2. Load inode table based on superblock
+    struct inode * curTable = (struct inode *) malloc(64 * sizeof(struct inode));
+    if (block_read(block_inodes, curTable) < 0){
+        printf("ERROR: Failed to load inode table\n");
+        return -1;
+    }
+
+    // 3. Load directory entries based on superblock
+    struct dir_entry * curDir = (struct dir_entry *) malloc(64 * sizeof(struct dir_entry));
+    if (block_read(block_dir, curDir) < 0){
+        printf("ERROR: Failed to load directory entries\n");
+        return -1;
+    }
+
+    // 4. Load inode free bitmap based on superblock
+    uint8_t * free_inode_bitmap = (uint8_t *) malloc(8 * sizeof(uint8_t));
+    if (block_read(block_freeinode, free_inode_bitmap) < 0){
+        printf("ERROR: Failed to load free inode bitmap\n");
+        return -1;
+    }
+
+    // 5. Load data free bitmap based on superblock
+    uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
+    if (block_read(block_inodes, curSuper_block) < 0){
+        printf("ERROR: Failed to load free data bitmap\n");
+        return -1;
+    }
+
+    // 6. Initialize all file descriptors to closed and offset 0
+    for (int i = 0; i < 32; i++){
+        fileDescriptors[i].open = 0;
+        fileDescriptors[i].file_offset = 0;
+    }
+
     return 0;
 }
 
