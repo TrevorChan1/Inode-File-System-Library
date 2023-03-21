@@ -35,6 +35,7 @@ struct dir_entry {
     char name[15];
 };
 struct dir_entry * curDir;
+int file_count;
 
 // File descriptors: Contain inode block #, if it's open, and file offset
 struct fd {
@@ -143,6 +144,7 @@ int make_fs(const char *disk_name){
         curDir[i].inode_number = 0;
         strcpy(curDir[i].name, "");
     }
+    file_count = 0;
 
     if (block_write(1, curDir) != 0){
         printf("ERROR: Failed to write directory entry block to disk\n");
@@ -217,6 +219,11 @@ int mount_fs(const char *disk_name){
     if (block_read(block_dir, curDir) < 0){
         printf("ERROR: Failed to load directory entries\n");
         return -1;
+    }
+    file_count = 0;
+    for (int i = 0; i < 64; i++){
+        if (curDir[i].is_used)
+            file_count++;
     }
 
     // 4. Load inode free bitmap based on superblock
@@ -342,7 +349,14 @@ int fs_freefd(){
     return -1;
 }
 
-
+// Directory entry function that finds first directory entry index that's unused
+int de_free(){
+    for (int i = 0; i < 64; i++){
+        if (!curDir[i].is_used)
+            return i;
+    }
+    return -1;
+}
 
 // File system function that opens file and generates a file descriptor if file name valid
 int fs_open(const char *name){
@@ -375,11 +389,67 @@ int fs_open(const char *name){
 
 // File system function that closes file descriptor
 int fs_close(int fd){
+    // Check that the fd is valid
+    if (validfd(fd) != 0){
+        return -1;
+    }
+
+    // If fd valid, close it and set fd as open
+    fileDescriptors[fd].file_offset = 0;
+    fileDescriptors[fd].open = 0;
+    fileDescriptors[fd].inode = 0;
+
     return 0;
 }
 
 // File system function that creates a new empty file of given name
 int fs_create(const char *name){
+    // Check that name is valid
+    if (strlen(name) < 0 || strlen(name) > 15){
+        printf("ERROR: File name exceeds limit\n");
+        return -1;
+    }
+
+    // Check that file name doesn't already exist
+    for (int i = 0; i < 64; i++){
+        if (strcmp(name, curDir[i].name) == 0){
+            printf("ERROR: File name already exists\n");
+            return -1;
+        }
+    }
+
+    // Check that directory is not full
+    if (file_count >= 64){
+        printf("ERROR: Root directory is full\n");
+        return -1;
+    }
+
+    // Find first free inode number (shouldn't fail if passed above)
+    int inum = find1stFree(curFreeInodes, 64);
+    if (inum < 0){
+        printf("ERROR: No free inodes\n");
+        return -1;
+    }
+
+    // Find first free directory entry (shouldn't fail if passed above)
+    int dirEntry = de_free();
+    if (dirEntry < 0){
+        printf("ERROR: No free directory entries\n");
+        return -1;
+    }
+
+    // Initialize directory entry
+    curDir[dirEntry].inode_number = inum;
+    curDir[dirEntry].is_used = 1;
+    strcpy(curDir[dirEntry].name, name);
+
+    // Set inode bitmap bit to used
+    setNbit(curFreeInodes, NUM_BLOCKS, inum, 0);
+
+    // Initialize inode (most initialization will happen on first write)
+    curTable[inum].file_size = 0;
+    curTable[inum].file_type = 1;
+
     return 0;
 }
 
