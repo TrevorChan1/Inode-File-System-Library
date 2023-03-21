@@ -242,6 +242,9 @@ int mount_fs(const char *disk_name){
         printf("ERROR: Failed to load free inode bitmap\n");
         return -1;
     }
+    for (int i = 0; i < 8; i++){
+        printf("%d\n", free_inode_bitmap[i]);
+    }
 
     // 5. Load data free bitmap based on superblock
     uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
