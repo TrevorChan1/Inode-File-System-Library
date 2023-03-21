@@ -83,6 +83,13 @@ int close_disk()
 	return 0;
 }
 
+int is_disk_open(){
+	if(active)
+		return 1;
+	else
+		return 0;
+}
+
 int block_write(int block, const void *buf)
 {
 	if (!active) {

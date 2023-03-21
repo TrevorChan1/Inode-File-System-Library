@@ -237,6 +237,50 @@ int mount_fs(const char *disk_name){
 
 // Disk function that unmounts virtual disk and saves any changes made to file system
 int umount_fs(const char *disk_name){
+
+    // First, check if disk is open
+    if (!is_disk_open()){
+        printf("ERROR: Disk not open\n");
+        return -1;
+    }
+
+    // Second, save all metadata to the disk (only need to write superblock once)
+
+    // Directory entries, then free allocated memory
+    if (block_write(1, curDir) < 0){
+        printf("ERROR: Failed to write directory entries to disk\n");
+        return -1;
+    }
+    free(curDir);
+
+    // Free data bitmap, then free allocated memory
+    if (block_write(2, curFreeData) < 0){
+        printf("ERROR: Failed to write free data bitmap to disk\n");
+        return -1;
+    }
+    free(curFreeData);
+
+    // Free inode bitmap, then free allocated memory
+    if (block_write(3, curFreeInodes) < 0){
+        printf("ERROR: Failed to write free inode bitmap to disk\n");
+        return -1;
+    }
+    free(curFreeInodes);
+
+    // Inode table, then free allocated memory
+    if (block_write(4, curTable) < 0){
+        printf("ERROR: Failed to write free inode bitmap to disk\n");
+        return -1;
+    }
+    free(curTable);
+
+    // Last, close the disk after all metadata was written to it
+    if (close_disk() < 0){
+        printf("ERROR: Failed to close disk\n");
+        return -1;
+    }
+
+    // Return success once closed
     return 0;
 }
 

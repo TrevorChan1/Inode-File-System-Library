@@ -9,6 +9,7 @@
 int make_disk(const char *name);     /* create an empty, virtual disk file          */
 int open_disk(const char *name);     /* open a virtual disk (file)                  */
 int close_disk();              /* close a previously opened disk (file)       */
+int is_disk_open();
 
 int block_write(int block, const void *buf);
                                /* write a block of size BLOCK_SIZE to disk    */
