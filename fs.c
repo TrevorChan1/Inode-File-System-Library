@@ -6,6 +6,8 @@
 #include <stdlib.h>
 
 #define NUM_BLOCKS 8192
+#define MAX_NUM_FILES 64
+#define MAX_OPEN_FILES 32
 
 // Global variables of disk
 
@@ -43,7 +45,7 @@ struct fd {
     uint16_t inode;
     uint16_t file_offset;
 };
-struct fd fileDescriptors[32];
+struct fd fileDescriptors[MAX_OPEN_FILES];
 int fd_count;
 
 // Free bitmaps global variables
@@ -130,16 +132,19 @@ int make_fs(const char *disk_name){
     }
 
     // 2. Set up inodes, allocate memory, and set inode table
-    curTable = (struct inode *) malloc(64 * sizeof(struct inode));
-
+    curTable = (struct inode *) malloc(MAX_NUM_FILES * sizeof(struct inode));
+    for (int i = 0; i < MAX_OPEN_FILES; i++){
+        curTable[i].double_indirect_offset = -1;
+        curTable[i].single_indirect_offset = -1;
+    }
     if (block_write(4, curTable) != 0){
         printf("ERROR: Failed to write inode table to disk\n");
         return -1;
     }
 
-    // 3. Set up directory entries and entry array (can only be 64 at a time)
-    curDir = (struct dir_entry *) malloc(64 * sizeof(struct dir_entry));
-    for (int i = 0; i < 32; i++){
+    // 3. Set up directory entries and entry array (can only be MAX_NUM_FILES at a time)
+    curDir = (struct dir_entry *) malloc(MAX_NUM_FILES * sizeof(struct dir_entry));
+    for (int i = 0; i < MAX_OPEN_FILES; i++){
         curDir[i].is_used = 0;
         curDir[i].inode_number = 0;
         strcpy(curDir[i].name, "");
@@ -153,8 +158,8 @@ int make_fs(const char *disk_name){
 
     // 4. inode free bitmap and initialize to all ones (uses uint8 so same functions can be used)
     curFreeInodes = (uint8_t *) malloc(8 * sizeof(uint8_t));
-    for (int i = 0; i < 64; i++){
-        setNbit(curFreeInodes, 64, i, 1);
+    for (int i = 0; i < MAX_NUM_FILES; i++){
+        setNbit(curFreeInodes, MAX_NUM_FILES, i, 1);
     }
 
     if (block_write(3, curFreeInodes) != 0){
@@ -178,11 +183,16 @@ int make_fs(const char *disk_name){
     }
 
     // 6. Set all file descriptors to be closed
-    for (int i = 0; i < 32; i++){
+    for (int i = 0; i < MAX_OPEN_FILES; i++){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
     }
     fd_count = 0;
+
+    if (close_disk() != 0){
+        printf("ERROR: Failed to close disk created\n");
+        return -1;
+    }
 
     return 0;
 }
@@ -208,20 +218,20 @@ int mount_fs(const char *disk_name){
     int block_inodes = curSuper_block->inode_table;
 
     // 2. Load inode table based on superblock
-    struct inode * curTable = (struct inode *) malloc(64 * sizeof(struct inode));
+    struct inode * curTable = (struct inode *) malloc(MAX_NUM_FILES * sizeof(struct inode));
     if (block_read(block_inodes, curTable) < 0){
         printf("ERROR: Failed to load inode table\n");
         return -1;
     }
 
     // 3. Load directory entries based on superblock
-    struct dir_entry * curDir = (struct dir_entry *) malloc(64 * sizeof(struct dir_entry));
+    struct dir_entry * curDir = (struct dir_entry *) malloc(MAX_NUM_FILES * sizeof(struct dir_entry));
     if (block_read(block_dir, curDir) < 0){
         printf("ERROR: Failed to load directory entries\n");
         return -1;
     }
     file_count = 0;
-    for (int i = 0; i < 64; i++){
+    for (int i = 0; i < MAX_NUM_FILES; i++){
         if (curDir[i].is_used)
             file_count++;
     }
@@ -241,7 +251,7 @@ int mount_fs(const char *disk_name){
     }
 
     // 6. Initialize all file descriptors to closed and offset 0
-    for (int i = 0; i < 32; i++){
+    for (int i = 0; i < MAX_OPEN_FILES; i++){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
     }
@@ -290,7 +300,7 @@ int umount_fs(const char *disk_name){
     free(curTable);
 
     // Close all file descriptors
-    for (int i = 0; i < 32; i++){
+    for (int i = 0; i < MAX_OPEN_FILES; i++){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
     }
@@ -310,7 +320,7 @@ int umount_fs(const char *disk_name){
 int validfd(int fd){
 
     // Check if fd is within range
-    if (fd < 0 || fd >= 32){
+    if (fd < 0 || fd >= MAX_OPEN_FILES){
         printf("ERROR: invalid file descriptor\n");
         return -1;
     }
@@ -328,7 +338,7 @@ int validfd(int fd){
 // File system helper function that checks if a file exists, if it does return inode number
 int fs_exists(const char * name){
     // Iterate through all directories. If file exists and matches the name, return 0 for success
-    for (int i = 0; i < 64; i++){
+    for (int i = 0; i < MAX_NUM_FILES; i++){
         if(strcmp(curDir[i].name, name) == 0 && curDir[i].is_used){
             return curDir[i].inode_number;
         }
@@ -347,7 +357,7 @@ int fs_isopen(const char * name){
     }
 
     // If open file descriptor found with same inode number, return 1
-    for (int i = 0; i < 32; i++){
+    for (int i = 0; i < MAX_OPEN_FILES; i++){
         if (fileDescriptors[i].inode == inum && fileDescriptors[i].open)
             return 1;
     }
@@ -357,7 +367,7 @@ int fs_isopen(const char * name){
 // File system function that finds the first free file descriptor and returns it
 int fs_freefd(){
     // Iterate through all file descriptors and find if any are open
-    for (int i = 0; i < 32; i++){
+    for (int i = 0; i < MAX_OPEN_FILES; i++){
         if (fileDescriptors[i].open){
             return i;
         }
@@ -368,7 +378,7 @@ int fs_freefd(){
 
 // Directory entry helper function that finds first directory entry index that's unused
 int de_free(){
-    for (int i = 0; i < 64; i++){
+    for (int i = 0; i < MAX_NUM_FILES; i++){
         if (!curDir[i].is_used)
             return i;
     }
@@ -377,7 +387,7 @@ int de_free(){
 
 // Directory entry helper that finds directory entry value where open
 int de_find(const char * name){
-    for (int i = 0; i < 64; i++){
+    for (int i = 0; i < MAX_NUM_FILES; i++){
         if (strcmp(name, curDir[i].name) == 0)
             return i;
     }
@@ -395,7 +405,7 @@ int fs_open(const char *name){
     }
 
     // Check if number of file descriptors is at max
-    if (fd_count >= 32){
+    if (fd_count >= MAX_OPEN_FILES){
         printf("ERROR: Unable to open file: Max Number of File Descriptors\n");
         return -1;
     }
@@ -437,7 +447,7 @@ int fs_create(const char *name){
     }
 
     // Check that file name doesn't already exist
-    for (int i = 0; i < 64; i++){
+    for (int i = 0; i < MAX_NUM_FILES; i++){
         if (strcmp(name, curDir[i].name) == 0){
             printf("ERROR: File name already exists\n");
             return -1;
@@ -445,13 +455,13 @@ int fs_create(const char *name){
     }
 
     // Check that directory is not full
-    if (file_count >= 64){
+    if (file_count >= MAX_NUM_FILES){
         printf("ERROR: Root directory is full\n");
         return -1;
     }
 
     // Find first free inode number (shouldn't fail if passed above)
-    int inum = find1stFree(curFreeInodes, 64);
+    int inum = find1stFree(curFreeInodes, MAX_NUM_FILES);
     if (inum < 0){
         printf("ERROR: No free inodes\n");
         return -1;
@@ -501,9 +511,30 @@ int fs_delete(const char *name){
     file_count--;
 
     // 2. Set inode entry to free
-    setNbit(curFreeInodes, 64, inum, 1);
+    setNbit(curFreeInodes, MAX_NUM_FILES, inum, 1);
     
-    // 3. Free inode values (all indirect blocks) TO-DO
+    // 3. Free inode values (all indirect blocks)
+    int numblocks = curTable[inum].file_size / 4096;
+    // If single indirection is used, set that data block to free
+    if(numblocks > 10){
+        setNbit(curFreeData, NUM_BLOCKS, curTable[inum].single_indirect_offset, 1);
+        curTable[inum].single_indirect_offset = -1;
+        // If double indirection is used, set each of the data blocks to free (single indirect = 1024 blocks + 10)
+        if (numblocks > 1034){
+            uint32_t * double_indirection_block = NULL;
+            if (block_read(curTable[inum].double_indirect_offset, double_indirection_block) != 0){
+                printf("ERROR: Failed to read from double indirection block\n");
+                return -1;
+            }
+            // Iterate through all single indirection blocks pointed to by double indirection and free
+            for (int i = 0; i < numblocks; i++){
+                setNbit(curFreeData, NUM_BLOCKS, double_indirection_block[i], 1);
+            }
+            // Free double indirection block itself
+            setNbit(curFreeData, NUM_BLOCKS, curTable[inum].double_indirect_offset, 1);
+            curTable[inum].double_indirect_offset = -1;
+        }
+    }
     curTable[inum].file_size = 0;
 
 
@@ -534,7 +565,17 @@ int fs_get_filesize(int fd){
 
 // File system function that creates a NULL terminated array of file names in root directory
 int fs_listfiles(char ***files){
-    
+    // Iterate through all files in directory, if open then add name
+    int curNum = 0;
+    for (int i = 0; i < MAX_NUM_FILES; i++){
+        if (curDir[i].is_used){
+            files[curNum++] = curDir[i].name;
+        }
+    }
+
+    if (curNum == 0)
+        printf("No files found\n");
+
     return 0;
 }
 
