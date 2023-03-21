@@ -139,6 +139,8 @@ int make_fs(const char *disk_name){
     struct dir_entry * curDir = (struct dir_entry *) malloc(64 * sizeof(struct dir_entry));
     for (int i = 0; i < 32; i++){
         curDir[i].is_used = 0;
+        curDir[i].inode_number = 0;
+        strcpy(curDir[i].name, "");
     }
 
     if (block_write(1, curDir) != 0){
