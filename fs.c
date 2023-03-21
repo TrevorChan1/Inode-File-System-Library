@@ -108,6 +108,11 @@ int make_fs(const char *disk_name){
         return -1;
     }
 
+    if (open_disk(disk_name) != 0){
+        printf("ERROR: Unable to open disk with name %s\n", disk_name);
+        return -1;
+    }
+
     // Initialize file system datastructures:
 
     // 1. Initialize a superblock with file system metadata and write to disk
