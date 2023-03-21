@@ -10,20 +10,20 @@
 
 // Superblock
 struct super_block {
-    uint16_t used_block_bitmap_count;
-    uint16_t used_block_bitmap_offset;
-    uint16_t inode_metadata_blocks;
-    uint16_t inode_metadata_offset;
+    uint16_t dentries;
+    uint16_t free_inode_bitmap;
+    uint16_t free_data_bitmap;
+    uint16_t inode_table;
 };
 struct super_block curSuper_block;
 
 // inodes
 struct inode {
-    uint8_t file_type;
+    uint16_t file_type;
     uint16_t file_size;
-    uint32_t direct_offset;
-    uint32_t single_indirect_offset;
-    uint32_t double_indirect_offset;
+    uint8_t direct_offset[10];
+    uint8_t single_indirect_offset;
+    uint8_t double_indirect_offset;
 };
 struct inode * curTable;
 
@@ -139,51 +139,49 @@ int make_fs(const char *disk_name){
 
     // 1. Initialize a superblock with file system metadata and write to disk
     struct super_block sb;
-    sb.inode_metadata_offset = 1;
-    sb.inode_metadata_blocks = 1;
-    sb.used_block_bitmap_offset = 2;
-    sb.used_block_bitmap_count = 0;
+    sb.dentries = 1;
+    sb.free_data_bitmap = 2;
+    sb.free_inode_bitmap = 3;
+    sb.inode_table = 4;
 
     if (block_write(0, &sb) != 0){
         printf("ERROR: Failed to write super block to disk\n");
         return -1;
     }
 
-    // 2. Set up inodes and inode table
-    struct inode inode_table[64];
-    curTable = inode_table;
+    // 2. Set up inodes, allocate memory, and set inode table
+    struct inode * curTable = (struct inode *) malloc(64 * sizeof(struct inode));
 
-    if (block_write(3, inode_table) != 0){
+    if (block_write(4, curTable) != 0){
         printf("ERROR: Failed to write inode table to disk\n");
         return -1;
     }
 
     // 3. Set up directory entries and entry array (can only be 64 at a time)
-    struct dir_entry dirEntries[64];
+    struct dir_entry * curDir = (struct dir_entry *) malloc(64 * sizeof(struct dir_entry));
     for (int i = 0; i < 32; i++){
-        dirEntries[i].is_used = 0;
+        curDir[i].is_used = 0;
     }
-    curDir = dirEntries;
 
-    if (block_write(4, dirEntries) != 0){
+    if (block_write(1, curDir) != 0){
         printf("ERROR: Failed to write directory entry block to disk\n");
         return -1;
     }
 
     // 4. inode free bitmap and initialize to all ones
-    uint64_t free_inode_bitmap;
+    uint64_t * free_inode_bitmap = (uint64_t *) malloc(sizeof(uint64_t));
     for (int i = 0; i < 64; i++){
-        setNinodebit(&free_inode_bitmap, i, 1);
+        setNinodebit(free_inode_bitmap, i, 1);
     }
     curFreeInodes = free_inode_bitmap;
 
-    if (block_write(1, &free_inode_bitmap) != 0){
+    if (block_write(3, &free_inode_bitmap) != 0){
         printf("ERROR: Failed to write inode free bitmap to disk\n");
         return -1;
     }
 
     // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
-    uint8_t free_block_bitmap[NUM_BLOCKS / 8];
+    uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
     for (int i = 4; i < NUM_BLOCKS; i++){
         setNdatabit(free_block_bitmap, i, 1);
     }
