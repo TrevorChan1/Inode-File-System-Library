@@ -100,7 +100,6 @@ void setNbit(uint8_t * bitmap, int size, int n, int value){
     
 }
 
-
 // Disk function that creates new disk and initializes global variables
 int make_fs(const char *disk_name){
     // Only way for code to fail is if it fails to create the disk
@@ -222,7 +221,7 @@ int mount_fs(const char *disk_name){
 
     // 5. Load data free bitmap based on superblock
     uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
-    if (block_read(block_inodes, curSuper_block) < 0){
+    if (block_read(block_freedata, free_block_bitmap) < 0){
         printf("ERROR: Failed to load free data bitmap\n");
         return -1;
     }
@@ -239,11 +238,11 @@ int mount_fs(const char *disk_name){
 // Disk function that unmounts virtual disk and saves any changes made to file system
 int umount_fs(const char *disk_name){
 
-    // First, check if disk is open
-    if (!is_disk_open()){
-        printf("ERROR: Disk not open\n");
-        return -1;
-    }
+    // // First, check if disk is open
+    // if (!is_disk_open()){
+    //     printf("ERROR: Disk not open\n");
+    //     return -1;
+    // }
 
     // Second, save all metadata to the disk (only need to write superblock once)
 
