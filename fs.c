@@ -128,7 +128,7 @@ int make_fs(const char *disk_name){
     }
 
     // 2. Set up inodes, allocate memory, and set inode table
-    struct inode * curTable = (struct inode *) malloc(64 * sizeof(struct inode));
+    curTable = (struct inode *) malloc(64 * sizeof(struct inode));
 
     if (block_write(4, curTable) != 0){
         printf("ERROR: Failed to write inode table to disk\n");
@@ -136,7 +136,7 @@ int make_fs(const char *disk_name){
     }
 
     // 3. Set up directory entries and entry array (can only be 64 at a time)
-    struct dir_entry * curDir = (struct dir_entry *) malloc(64 * sizeof(struct dir_entry));
+    curDir = (struct dir_entry *) malloc(64 * sizeof(struct dir_entry));
     for (int i = 0; i < 32; i++){
         curDir[i].is_used = 0;
         curDir[i].inode_number = 0;
@@ -149,29 +149,27 @@ int make_fs(const char *disk_name){
     }
 
     // 4. inode free bitmap and initialize to all ones (uses uint8 so same functions can be used)
-    uint8_t * free_inode_bitmap = (uint8_t *) malloc(8 * sizeof(uint8_t));
+    curFreeInodes = (uint8_t *) malloc(8 * sizeof(uint8_t));
     for (int i = 0; i < 64; i++){
-        setNbit(free_inode_bitmap, 64, i, 1);
+        setNbit(curFreeInodes, 64, i, 1);
     }
-    curFreeInodes = free_inode_bitmap;
 
-    if (block_write(3, &free_inode_bitmap) != 0){
+    if (block_write(3, curFreeInodes) != 0){
         printf("ERROR: Failed to write inode free bitmap to disk\n");
         return -1;
     }
 
     // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
-    uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
+    curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
     for (int i = 5; i < NUM_BLOCKS; i++){
-        setNbit(free_block_bitmap, NUM_BLOCKS, i, 1);
+        setNbit(curFreeData, NUM_BLOCKS, i, 1);
     }
 
     for (int j = 0; j < 5; j++){
-        setNbit(free_block_bitmap, NUM_BLOCKS, j, 0);
+        setNbit(curFreeData, NUM_BLOCKS, j, 0);
     }
-    curFreeData = free_block_bitmap;
 
-    if (block_write(2, free_block_bitmap) != 0){
+    if (block_write(2, curFreeData) != 0){
         printf("ERROR: Failed to write data free bitmap to disk\n");
         return -1;
     }
