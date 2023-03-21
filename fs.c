@@ -43,6 +43,7 @@ struct fd {
     uint16_t file_offset;
 };
 struct fd fileDescriptors[32];
+int fd_count;
 
 // Free bitmaps global variables
 uint8_t * curFreeInodes;
@@ -179,6 +180,7 @@ int make_fs(const char *disk_name){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
     }
+    fd_count = 0;
 
     return 0;
 }
@@ -236,6 +238,7 @@ int mount_fs(const char *disk_name){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
     }
+    fd_count = 0;
 
     return 0;
 }
@@ -243,11 +246,11 @@ int mount_fs(const char *disk_name){
 // Disk function that unmounts virtual disk and saves any changes made to file system
 int umount_fs(const char *disk_name){
 
-    // // First, check if disk is open
-    // if (!is_disk_open()){
-    //     printf("ERROR: Disk not open\n");
-    //     return -1;
-    // }
+    if (open_disk(disk_name) == 0){
+        printf("ERROR: Not an open disk\n");
+        close_disk();
+        return -1;
+    }
 
     // Second, save all metadata to the disk (only need to write superblock once)
 
@@ -284,6 +287,7 @@ int umount_fs(const char *disk_name){
         fileDescriptors[i].open = 0;
         fileDescriptors[i].file_offset = 0;
     }
+    fd_count = 0;
 
     // Last, close the disk after all metadata was written to it
     if (close_disk() < 0){
@@ -314,9 +318,59 @@ int validfd(int fd){
     return 0;
 }
 
+// File system function that checks if a file exists, if it does return inode number
+int fs_exists(const char * name){
+    // Iterate through all directories. If file exists and matches the name, return 0 for success
+    for (int i = 0; i < 64; i++){
+        if(strcmp(curDir[i].name, name) == 0 && curDir[i].is_used){
+            return curDir[i].inode_number;
+        }
+    }
+    // If not found, return -1
+    return -1;
+}
+
+// File system function that finds the first free file descriptor and returns it
+int fs_freefd(){
+    // Iterate through all file descriptors and find if any are open
+    for (int i = 0; i < 32; i++){
+        if (fileDescriptors[i].open){
+            return i;
+        }
+    }
+    // If found none, return -1
+    return -1;
+}
+
+
+
 // File system function that opens file and generates a file descriptor if file name valid
 int fs_open(const char *name){
-    return 0;
+
+    // If the file doesn't exist, print error
+    int inum = fs_exists(name);
+    if (inum < 0){
+        printf("ERROR: File %s does not exist\n", name);
+        return -1;
+    }
+
+    // Check if number of file descriptors is at max
+    if (fd_count >= 32){
+        printf("ERROR: Unable to open file: Max Number of File Descriptors\n");
+        return -1;
+    }
+
+    // Get first free file descriptor (shouldn't reach error if above passed)
+    int fd = fs_freefd();
+    if (fd < 0){
+        printf("ERROR: No open file descriptors");
+        return -1;
+    }
+    fileDescriptors[fd].file_offset = 0;
+    fileDescriptors[fd].open = 1;
+    fileDescriptors[fd].inode = inum;
+
+    return fd;
 }
 
 // File system function that closes file descriptor
