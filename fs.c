@@ -325,7 +325,7 @@ int validfd(int fd){
     return 0;
 }
 
-// File system function that checks if a file exists, if it does return inode number
+// File system helper function that checks if a file exists, if it does return inode number
 int fs_exists(const char * name){
     // Iterate through all directories. If file exists and matches the name, return 0 for success
     for (int i = 0; i < 64; i++){
@@ -335,6 +335,23 @@ int fs_exists(const char * name){
     }
     // If not found, return -1
     return -1;
+}
+
+// File system helper function that checks if there are any open file descriptors of the file
+int fs_isopen(const char * name){
+    // Check if file exists
+    int inum = fs_exists(name);
+    if (inum < 0){
+        printf("ERROR: File %s doesn't exist\n", name);
+        return -1;
+    }
+
+    // If open file descriptor found with same inode number, return 1
+    for (int i = 0; i < 32; i++){
+        if (fileDescriptors[i].inode == inum && fileDescriptors[i].open)
+            return 1;
+    }
+    return 0;
 }
 
 // File system function that finds the first free file descriptor and returns it
@@ -349,10 +366,19 @@ int fs_freefd(){
     return -1;
 }
 
-// Directory entry function that finds first directory entry index that's unused
+// Directory entry helper function that finds first directory entry index that's unused
 int de_free(){
     for (int i = 0; i < 64; i++){
         if (!curDir[i].is_used)
+            return i;
+    }
+    return -1;
+}
+
+// Directory entry helper that finds directory entry value where open
+int de_find(const char * name){
+    for (int i = 0; i < 64; i++){
+        if (strcmp(name, curDir[i].name) == 0)
             return i;
     }
     return -1;
@@ -455,6 +481,32 @@ int fs_create(const char *name){
 
 // File system function that deletes file of given name if exists and is closed
 int fs_delete(const char *name){
+    // Check if file exists in directory entries
+    int inum = fs_exists(name);
+    if (inum < 0){
+        printf("ERROR: File %s does not exist\n", name);
+        return -1;
+    }
+
+    // Check if file is open
+    if (fs_isopen(name)){
+        printf("ERROR: File %s is currently open / in use\n", name);
+        return -1;
+    }
+
+    // Delete file:
+
+    // 1. Close directory entry
+    curDir[de_find(name)].is_used = 0;
+    file_count--;
+
+    // 2. Set inode entry to free
+    setNbit(curFreeInodes, 64, inum, 1);
+    
+    // 3. Free inode values (all indirect blocks) TO-DO
+    curTable[inum].file_size = 0;
+
+
     return 0;
 }
 
