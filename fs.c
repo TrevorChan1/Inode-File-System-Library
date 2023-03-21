@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define NUM_BLOCKS 8192
 
@@ -274,6 +275,12 @@ int umount_fs(const char *disk_name){
     }
     free(curTable);
 
+    // Close all file descriptors
+    for (int i = 0; i < 32; i++){
+        fileDescriptors[i].open = 0;
+        fileDescriptors[i].file_offset = 0;
+    }
+
     // Last, close the disk after all metadata was written to it
     if (close_disk() < 0){
         printf("ERROR: Failed to close disk\n");
@@ -281,6 +288,25 @@ int umount_fs(const char *disk_name){
     }
 
     // Return success once closed
+    return 0;
+}
+
+// Helper function that checks if file descriptor is valid
+int validfd(int fd){
+
+    // Check if fd is within range
+    if (fd < 0 || fd >= 32){
+        printf("ERROR: invalid file descriptor\n");
+        return -1;
+    }
+
+    // Check if fd is open
+    if (!fileDescriptors[fd].open){
+        printf("ERROR: Not an open file descriptor\n");
+        return -1;
+    }
+
+    //Otherwise, return valid
     return 0;
 }
 
@@ -316,16 +342,38 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
 // File system function that returns the filesize of given file
 int fs_get_filesize(int fd){
-    return 0;
+    
+    // Check if the file descriptor is valid
+    if (!validfd(fd)){
+        return -1;
+    }
+
+    // Return the file size of the inode pointed to by file descriptor
+    return (int) curTable[fileDescriptors[fd].inode].file_size;
 }
 
 // File system function that creates a NULL terminated array of file names in root directory
 int fs_listfiles(char ***files){
+    
     return 0;
 }
 
 // File system function that sets the file pointer offset of a file descriptor
 int fs_lseek(int fd, off_t offset){
+    
+    // Check if file descriptor is valid
+    if (!validfd(fd)){
+        return -1;
+    }
+
+    int filesize = curTable[fileDescriptors[fd].inode].file_size;
+    if (offset < 0 || offset > filesize){
+        printf("ERROR: offset out of range\n");
+        return -1;
+    }
+
+    fileDescriptors[fd].file_offset = offset;
+
     return 0;
 }
 
