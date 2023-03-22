@@ -11,9 +11,11 @@ int main(){
     int fd2 = fs_open("hai.txt");
     printf("%d %d\n", fd, fd2);
     printf("%d\n", fs_close(fd));
-    void * buf;
-    printf("%d\n", fs_read(fd, buf, 1));
-    printf("%d\n", fs_read(fd2, buf, 1));
+    char buf[10];
+    char * m = "hello!";
+    printf("%d\n", fs_write(fd2, m, 7));
+    printf("%d\n", fs_read(fd2, buf, 7));
     printf("%s\n", buf);
+    
     return 0;
 }

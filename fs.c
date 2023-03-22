@@ -585,7 +585,7 @@ int fs_read(int fd, void *buf, size_t nbyte){
     if (validfd(fd) != 0){
         return -1;
     }
-
+    
     // Calculate number of blocks that can be read (assuming all metadata is correct)
     int bytes_left;
     int bytesRemaining = curTable[fileDescriptors[fd].inode].file_size - fileDescriptors[fd].file_offset;
@@ -614,7 +614,7 @@ int fs_read(int fd, void *buf, size_t nbyte){
             printf("ERROR: Unable to read from block\n");
             return -1;
         }
-
+        
         // Set the buffer size to be read from the file
         int read_size = 0;
         if (block_offset + bytes_left >= BLOCK_SIZE)    // If enough bytes left to read into next block
@@ -624,12 +624,13 @@ int fs_read(int fd, void *buf, size_t nbyte){
         
         // Store bytes into the buf
         memcpy(buf + bytes_read, block_buf, read_size);
-
+        
         // Prep for the next iteration of the loop (or for it to end)
         bytes_read += read_size;
         bytes_left -= read_size;
         if (block_offset)
             block_offset = 0;
+        
     }
     fileDescriptors[fd].file_offset += bytes_read;
     return bytes_read;
@@ -645,7 +646,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
     // Initialize variables to know where to start writing
     int cur_block = fileDescriptors[fd].file_offset / BLOCK_SIZE;       // Current block (starts based on offset)
     int block_offset = fileDescriptors[fd].file_offset % BLOCK_SIZE;    // Byte offset (due to file offset)
-    struct inode node = curTable[fileDescriptors[fd].inode];
+    struct inode * node = &curTable[fileDescriptors[fd].inode];
     int bytes_written = 0;
     int bytes_left = nbyte;
 
@@ -659,7 +660,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
         // If writing current block requires a new block, grab first free block to be used
         uint8_t new_block = 0;
         uint16_t block;
-        if (node.file_size == 0 || node.file_size < (BLOCK_SIZE * (cur_block))){
+        if (node->file_size == 0 || node->file_size < (BLOCK_SIZE * (cur_block))){
             new_block = 1;
             block = find1stFree(curFreeData, BLOCK_SIZE);
             // If full, return bytes_written (number of bytes currently written to disk)
@@ -670,7 +671,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
         }
         // If writing to a block that already exists, simply set block number to current block
         else 
-            block = node.direct_offset[cur_block];  // TO DO: Helper function that calculates block number given inode
+            block = node->direct_offset[cur_block];  // TO DO: Helper function that calculates block number given inode
         
         // Calculate the number of blocks to be written on this write
         int this_write = 0;
@@ -699,15 +700,16 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
         // Once done writing, if it was a new block set metadata to reflect that
         if (new_block){
-            node.direct_offset[cur_block] = block;
+            node->direct_offset[cur_block] = block;
             setNbit(curFreeData, BLOCK_SIZE, block, 0);
         }
         // Prepare for next write
         if (block_offset) block_offset = 0;
         bytes_written += this_write;
+        node->file_size += bytes_written;
     }
-
-    return 0;
+    
+    return bytes_written;
 }
 
 // File system function that returns the filesize of given file
