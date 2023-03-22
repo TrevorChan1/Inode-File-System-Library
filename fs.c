@@ -52,17 +52,6 @@ int fd_count;
 uint8_t * curFreeInodes;
 uint8_t * curFreeData;
 
-// Check if currently mounted
-int is_mounted;
-
-// Helper function that pads buffers with 0's if not filling block
-int block_write_padded(int block, void * buf, int size){
-    char block_buf[BLOCK_SIZE];
-    memset(block_buf, 0, sizeof(block_buf));
-    memcpy(block_buf, buf, size);
-    return block_write(block, block_buf);
-}
-
 // Bitwise helper function that takes a bitmap and returns nth bit (0 or 1)
 int getNbit(uint8_t * bitmap, int size, int n){
     // If n is out of block number range, print error and do nothing
@@ -136,8 +125,12 @@ int make_fs(const char *disk_name){
     curSuper_block->free_data_bitmap = 2;
     curSuper_block->free_inode_bitmap = 3;
     curSuper_block->inode_table = 4;
-
-    if (block_write_padded(0, curSuper_block, sizeof(struct super_block)) != 0){
+    
+    char block_buf[BLOCK_SIZE];
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curSuper_block, sizeof(struct super_block));
+    // printf("%lu %lu\n", sizeof(curSuper_block), sizeof(struct super_block));
+    if (block_write(0, block_buf) != 0){
         printf("ERROR: Failed to write super block to disk\n");
         return -1;
     }
@@ -148,7 +141,10 @@ int make_fs(const char *disk_name){
         curTable[i].double_indirect_offset = -1;
         curTable[i].single_indirect_offset = -1;
     }
-    if (block_write_padded(4, curTable, MAX_NUM_FILES * sizeof(struct inode)) != 0){
+    
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curTable, MAX_NUM_FILES * sizeof(struct inode));
+    if (block_write(4, block_buf) != 0){
         printf("ERROR: Failed to write inode table to disk\n");
         return -1;
     }
@@ -162,7 +158,7 @@ int make_fs(const char *disk_name){
     }
     file_count = 0;
 
-    if (block_write_padded(1, curDir, MAX_NUM_FILES * sizeof(struct dir_entry)) != 0){
+    if (block_write(1, curDir) != 0){
         printf("ERROR: Failed to write directory entry block to disk\n");
         return -1;
     }
@@ -173,13 +169,13 @@ int make_fs(const char *disk_name){
         setNbit(curFreeInodes, MAX_NUM_FILES, i, 1);
     }
 
-    if (block_write_padded(3, curFreeInodes, 8 * sizeof(uint8_t)) != 0){
+    if (block_write(3, curFreeInodes) != 0){
         printf("ERROR: Failed to write inode free bitmap to disk\n");
         return -1;
     }
 
     // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
-    curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8);
+    curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
     for (int i = 5; i < NUM_BLOCKS; i++){
         setNbit(curFreeData, NUM_BLOCKS, i, 1);
     }
@@ -188,7 +184,7 @@ int make_fs(const char *disk_name){
         setNbit(curFreeData, NUM_BLOCKS, j, 0);
     }
 
-    if (block_write_padded(2, curFreeData, NUM_BLOCKS / 8) != 0){
+    if (block_write(2, curFreeData) != 0){
         printf("ERROR: Failed to write data free bitmap to disk\n");
         return -1;
     }
@@ -218,15 +214,19 @@ int mount_fs(const char *disk_name){
 
     // 1. Read in the superblock from the 1st block of the disk
     curSuper_block = (struct super_block *) malloc(sizeof(struct super_block));
-    if (block_read(0, curSuper_block) < 0){
+
+    char block_buf[BLOCK_SIZE];
+    if (block_read(0, block_buf) < 0){
         printf("ERROR: Failed to read from superblock\n");
         return -1;
     }
+    memcpy(curSuper_block, block_buf, sizeof(struct super_block));
 
     int block_dir = curSuper_block->dentries;
     int block_freedata = curSuper_block->free_data_bitmap;
     int block_freeinode = curSuper_block->free_inode_bitmap;
     int block_inodes = curSuper_block->inode_table;
+    // printf("%d %d %d %d\n", block_dir, block_freedata, block_freeinode, block_inodes);
 
     // 2. Load inode table based on superblock
     struct inode * curTable = (struct inode *) malloc(MAX_NUM_FILES * sizeof(struct inode));
@@ -267,43 +267,44 @@ int mount_fs(const char *disk_name){
         fileDescriptors[i].file_offset = 0;
     }
     fd_count = 0;
-    is_mounted = 1;
+
     return 0;
 }
 
 // Disk function that unmounts virtual disk and saves any changes made to file system
 int umount_fs(const char *disk_name){
 
-    if (!is_mounted){
+    if (open_disk(disk_name) == 0){
         printf("ERROR: Not an open disk\n");
+        close_disk();
         return -1;
     }
 
     // Second, save all metadata to the disk (only need to write superblock once)
 
     // Directory entries, then free allocated memory
-    if (block_write_padded(1, curDir, MAX_NUM_FILES * sizeof(struct dir_entry)) != 0){
+    if (block_write(1, curDir) != 0){
         printf("ERROR: Failed to write directory entries to disk\n");
         return -1;
     }
     free(curDir);
-//
+
     // Free data bitmap, then free allocated memory
-    if (block_write_padded(2, curFreeData, NUM_BLOCKS/8) != 0){
+    if (block_write(2, curFreeData) != 0){
         printf("ERROR: Failed to write free data bitmap to disk\n");
         return -1;
     }
     free(curFreeData);
 
     // Free inode bitmap, then free allocated memory
-    if (block_write_padded(3, curFreeInodes, 8 * sizeof(uint8_t)) != 0){
+    if (block_write(3, curFreeInodes) != 0){
         printf("ERROR: Failed to write free inode bitmap to disk\n");
         return -1;
     }
     free(curFreeInodes);
 
     // Inode table, then free allocated memory
-    if (block_write_padded(4, curTable, MAX_NUM_FILES * sizeof(struct inode)) != 0){
+    if (block_write(4, curTable) != 0){
         printf("ERROR: Failed to write free inode bitmap to disk\n");
         return -1;
     }
@@ -321,7 +322,7 @@ int umount_fs(const char *disk_name){
         printf("ERROR: Failed to close disk\n");
         return -1;
     }
-    is_mounted = 0;
+
     // Return success once closed
     return 0;
 }
