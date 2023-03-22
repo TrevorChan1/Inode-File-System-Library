@@ -6,7 +6,6 @@
 #include <stdlib.h>
 
 #define NUM_BLOCKS 8192
-#define BLOCK_SIZE 4196
 #define MAX_NUM_FILES 64
 #define MAX_OPEN_FILES 32
 
@@ -578,7 +577,7 @@ int fs_listfiles(char ***files){
     int curNum = 0;
     for (int i = 0; i < MAX_NUM_FILES; i++){
         if (curDir[i].is_used){
-            files[curNum++] = curDir[i].name;
+            *files[curNum++] = curDir[i].name;
         }
     }
 
