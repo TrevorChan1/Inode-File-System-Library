@@ -52,6 +52,9 @@ int fd_count;
 uint8_t * curFreeInodes;
 uint8_t * curFreeData;
 
+// Check if currently mounted
+int is_mounted;
+
 // Helper function that pads buffers with 0's if not filling block
 int block_write_padded(int block, void * buf, int size){
     char block_buf[BLOCK_SIZE];
@@ -264,16 +267,15 @@ int mount_fs(const char *disk_name){
         fileDescriptors[i].file_offset = 0;
     }
     fd_count = 0;
-
+    is_mounted = 1;
     return 0;
 }
 
 // Disk function that unmounts virtual disk and saves any changes made to file system
 int umount_fs(const char *disk_name){
 
-    if (open_disk(disk_name) == 0){
+    if (!is_mounted){
         printf("ERROR: Not an open disk\n");
-        close_disk();
         return -1;
     }
 
@@ -319,7 +321,7 @@ int umount_fs(const char *disk_name){
         printf("ERROR: Failed to close disk\n");
         return -1;
     }
-
+    is_mounted = 0;
     // Return success once closed
     return 0;
 }
