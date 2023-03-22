@@ -586,10 +586,17 @@ int fs_read(int fd, void *buf, size_t nbyte){
         return -1;
     }
     
+    // Initialize variables to be used when iterating through blocks
+    char block_buf[BLOCK_SIZE]; // Buffer that will read from blocks in disk
+    int cur_block = fileDescriptors[fd].file_offset / BLOCK_SIZE;       // Current block (starts based on offset)
+    int block_offset = fileDescriptors[fd].file_offset % BLOCK_SIZE;    // Byte offset (due to file offset)
+    int bytes_read = 0; // How many bytes have been read so far
+    struct inode node = curTable[fileDescriptors[fd].inode];    // inode
+
     // Calculate number of blocks that can be read (assuming all metadata is correct)
     int bytes_left;
     int bytesRemaining = curTable[fileDescriptors[fd].inode].file_size - fileDescriptors[fd].file_offset;
-    
+
     // If there are enough bytes to read nbyte bytes, set read to nbytes
     if (bytesRemaining >= nbyte)
         bytes_left = nbyte;
@@ -600,12 +607,7 @@ int fs_read(int fd, void *buf, size_t nbyte){
     // Otherwise, just set number able to read to the rest of the bytes left in the file
         bytes_left = bytesRemaining;
 
-    // Initialize variables to be used when iterating through blocks
-    char block_buf[BLOCK_SIZE]; // Buffer that will read from blocks in disk
-    int cur_block = fileDescriptors[fd].file_offset / BLOCK_SIZE;       // Current block (starts based on offset)
-    int block_offset = fileDescriptors[fd].file_offset % BLOCK_SIZE;    // Byte offset (due to file offset)
-    int bytes_read = 0; // How many bytes have been read so far
-    struct inode node = curTable[fileDescriptors[fd].inode];    // inode
+    printf("remaining: %d   offset: %d\n", bytes_left, fileDescriptors[fd].file_offset);
 
     // Loop through reading block by block until there are no more bytes left to read
     while (bytes_left > 0){
@@ -620,10 +622,10 @@ int fs_read(int fd, void *buf, size_t nbyte){
         if (block_offset + bytes_left >= BLOCK_SIZE)    // If enough bytes left to read into next block
             read_size = BLOCK_SIZE - block_offset;
         else                    // If not enough bytes to read into next block, grab last bytes
-            read_size = bytes_left - block_offset;
+            read_size = bytes_left;
         
         // Store bytes into the buf
-        memcpy(buf + bytes_read, block_buf, read_size);
+        memcpy(buf + bytes_read, block_buf + block_offset, read_size);
         
         // Prep for the next iteration of the loop (or for it to end)
         bytes_read += read_size;
@@ -678,7 +680,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
         if (bytes_left + block_offset >= BLOCK_SIZE)
             this_write = BLOCK_SIZE - block_offset;
         else
-            this_write = bytes_left - block_offset;
+            this_write = bytes_left;
 
         // Write to the block number provided
         // If new block, set unused bytes to 0. Otherwise, copy current block to write over
@@ -707,8 +709,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
         if (block_offset) block_offset = 0;
         bytes_written += this_write;
         node->file_size += bytes_written;
+        fileDescriptors[fd].file_offset += bytes_written;
     }
-    
+
     return bytes_written;
 }
 
