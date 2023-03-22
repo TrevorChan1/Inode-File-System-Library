@@ -289,7 +289,7 @@ int umount_fs(const char *disk_name){
     free(curDir);
 
     // Free data bitmap, then free allocated memory
-    if (block_write_padded(2, curFreeData, NUM_BLOCKS) != 0){
+    if (block_write_padded(2, curFreeData, NUM_BLOCKS/8) != 0){
         printf("ERROR: Failed to write free data bitmap to disk\n");
         return -1;
     }
