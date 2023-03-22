@@ -631,11 +631,23 @@ int fs_read(int fd, void *buf, size_t nbyte){
         if (block_offset)
             block_offset = 0;
     }
+    fileDescriptors[fd].file_offset += bytes_read;
     return bytes_read;
 }
 
 // File system function that writes nbytes of buf into file using file descriptor
 int fs_write(int fd, void *buf, size_t nbyte){
+    // Check if file descriptor is valid
+    if (validfd(fd) != 0){
+        return -1;
+    }
+
+    // Initialize variables to be used when iterating through blocks
+    char block_buf[BLOCK_SIZE]; // Buffer that will read from blocks in disk
+    int cur_block = fileDescriptors[fd].file_offset / BLOCK_SIZE;       // Current block (starts based on offset)
+    int block_offset = fileDescriptors[fd].file_offset % BLOCK_SIZE;    // Byte offset (due to file offset)
+    
+
     return 0;
 }
 
