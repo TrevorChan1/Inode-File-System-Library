@@ -179,7 +179,7 @@ int make_fs(const char *disk_name){
     }
 
     // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
-    curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
+    curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8);
     for (int i = 5; i < NUM_BLOCKS; i++){
         setNbit(curFreeData, NUM_BLOCKS, i, 1);
     }
@@ -188,7 +188,7 @@ int make_fs(const char *disk_name){
         setNbit(curFreeData, NUM_BLOCKS, j, 0);
     }
 
-    if (block_write_padded(2, curFreeData, NUM_BLOCKS) != 0){
+    if (block_write_padded(2, curFreeData, NUM_BLOCKS / 8) != 0){
         printf("ERROR: Failed to write data free bitmap to disk\n");
         return -1;
     }
