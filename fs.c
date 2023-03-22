@@ -97,11 +97,9 @@ void setNbit(uint8_t * bitmap, int size, int n, int value){
     }
     // If value is setting a 0, create mask of 1's and a 0 in the bit place, then AND with number
     else{
-        mask = 255;
-        mask = (mask >> (7-shift)) & 0;
+        mask = 255 - (128 >> shift);
         bitmap[arrIndex] = bitmap[arrIndex] & mask;
     }
-    
 }
 
 // Disk function that creates new disk and initializes global variables
@@ -497,9 +495,10 @@ int fs_create(const char *name){
         printf("ERROR: Root directory is full\n");
         return -1;
     }
-
+    
     // Find first free inode number (shouldn't fail if passed above)
     int inum = find1stFree(curFreeInodes, MAX_NUM_FILES);
+    
     if (inum < 0){
         printf("ERROR: No free inodes\n");
         return -1;
@@ -518,7 +517,7 @@ int fs_create(const char *name){
     strcpy(curDir[dirEntry].name, name);
 
     // Set inode bitmap bit to used
-    setNbit(curFreeInodes, NUM_BLOCKS, inum, 0);
+    setNbit(curFreeInodes, MAX_NUM_FILES, inum, 0);
 
     // Initialize inode (most initialization will happen on first write)
     curTable[inum].file_size = 0;
@@ -606,8 +605,6 @@ int fs_read(int fd, void *buf, size_t nbyte){
     else
     // Otherwise, just set number able to read to the rest of the bytes left in the file
         bytes_left = bytesRemaining;
-
-    printf("remaining: %d   offset: %d\n", bytes_left, fileDescriptors[fd].file_offset);
 
     // Loop through reading block by block until there are no more bytes left to read
     while (bytes_left > 0){
