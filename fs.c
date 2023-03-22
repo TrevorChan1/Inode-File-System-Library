@@ -362,7 +362,7 @@ int validfd(int fd){
     }
 
     // Check if fd is open
-    if (!fileDescriptors[fd].open){
+    if (fileDescriptors[fd].open != 1){
         printf("ERROR: Not an open file descriptor\n");
         return -1;
     }
@@ -402,9 +402,9 @@ int fs_isopen(const char * name){
 
 // File system function that finds the first free file descriptor and returns it
 int fs_freefd(){
-    // Iterate through all file descriptors and find if any are open
+    // Iterate through all file descriptors and find if any are unused
     for (int i = 0; i < MAX_OPEN_FILES; i++){
-        if (fileDescriptors[i].open){
+        if (fileDescriptors[i].open == 0){
             return i;
         }
     }
@@ -455,6 +455,7 @@ int fs_open(const char *name){
     fileDescriptors[fd].file_offset = 0;
     fileDescriptors[fd].open = 1;
     fileDescriptors[fd].inode = inum;
+    fd_count++;
 
     return fd;
 }
@@ -466,10 +467,11 @@ int fs_close(int fd){
         return -1;
     }
 
-    // If fd valid, close it and set fd as open
+    // If fd valid, close it and set fd as unused
     fileDescriptors[fd].file_offset = 0;
     fileDescriptors[fd].open = 0;
     fileDescriptors[fd].inode = 0;
+    fd_count--;
 
     return 0;
 }
@@ -580,7 +582,7 @@ int fs_delete(const char *name){
 // File system function that reads nbytes from file into buf
 int fs_read(int fd, void *buf, size_t nbyte){
     // Check if file descriptor is valid
-    if (!validfd(fd)){
+    if (validfd(fd) != 0){
         return -1;
     }
 
