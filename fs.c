@@ -126,6 +126,7 @@ int make_fs(const char *disk_name){
     curSuper_block->free_inode_bitmap = 3;
     curSuper_block->inode_table = 4;
     
+    // Use a buffer with all unused bytes set to 0 (clear garbage before write)
     char block_buf[BLOCK_SIZE];
     memset(block_buf, 0, sizeof(block_buf));
     memcpy(block_buf, curSuper_block, sizeof(struct super_block));
@@ -158,7 +159,9 @@ int make_fs(const char *disk_name){
     }
     file_count = 0;
 
-    if (block_write(1, curDir) != 0){
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curDir, MAX_NUM_FILES * sizeof(struct dir_entry));
+    if (block_write(1, block_buf) != 0){
         printf("ERROR: Failed to write directory entry block to disk\n");
         return -1;
     }
@@ -169,7 +172,9 @@ int make_fs(const char *disk_name){
         setNbit(curFreeInodes, MAX_NUM_FILES, i, 1);
     }
 
-    if (block_write(3, curFreeInodes) != 0){
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curFreeInodes, 8 * sizeof(uint8_t));
+    if (block_write(3, block_buf) != 0){
         printf("ERROR: Failed to write inode free bitmap to disk\n");
         return -1;
     }
@@ -184,7 +189,9 @@ int make_fs(const char *disk_name){
         setNbit(curFreeData, NUM_BLOCKS, j, 0);
     }
 
-    if (block_write(2, curFreeData) != 0){
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curFreeData, NUM_BLOCKS / 8 * sizeof(uint8_t));
+    if (block_write(2, block_buf) != 0){
         printf("ERROR: Failed to write data free bitmap to disk\n");
         return -1;
     }
@@ -230,17 +237,22 @@ int mount_fs(const char *disk_name){
 
     // 2. Load inode table based on superblock
     struct inode * curTable = (struct inode *) malloc(MAX_NUM_FILES * sizeof(struct inode));
-    if (block_read(block_inodes, curTable) < 0){
+    if (block_read(block_inodes, block_buf) < 0){
         printf("ERROR: Failed to load inode table\n");
         return -1;
     }
+    // Only read bytes need
+    memcpy(curTable, block_buf, MAX_NUM_FILES * sizeof(struct inode));
+    // printf("%d\n", curTable[0].double_indirect_offset);
 
     // 3. Load directory entries based on superblock
     struct dir_entry * curDir = (struct dir_entry *) malloc(MAX_NUM_FILES * sizeof(struct dir_entry));
-    if (block_read(block_dir, curDir) < 0){
+    if (block_read(block_dir, block_buf) < 0){
         printf("ERROR: Failed to load directory entries\n");
         return -1;
     }
+    memcpy(curDir, block_buf, MAX_NUM_FILES * sizeof(struct dir_entry));
+
     file_count = 0;
     for (int i = 0; i < MAX_NUM_FILES; i++){
         if (curDir[i].is_used)
@@ -249,17 +261,19 @@ int mount_fs(const char *disk_name){
 
     // 4. Load inode free bitmap based on superblock
     uint8_t * free_inode_bitmap = (uint8_t *) malloc(8 * sizeof(uint8_t));
-    if (block_read(block_freeinode, free_inode_bitmap) < 0){
+    if (block_read(block_freeinode, block_buf) < 0){
         printf("ERROR: Failed to load free inode bitmap\n");
         return -1;
     }
+    memcpy(free_inode_bitmap, block_buf, 8 * sizeof(uint8_t));
 
     // 5. Load data free bitmap based on superblock
     uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
-    if (block_read(block_freedata, free_block_bitmap) < 0){
+    if (block_read(block_freedata, block_buf) < 0){
         printf("ERROR: Failed to load free data bitmap\n");
         return -1;
     }
+    memcpy(free_block_bitmap, block_buf, NUM_BLOCKS / 8 * sizeof(uint8_t));
 
     // 6. Initialize all file descriptors to closed and offset 0
     for (int i = 0; i < MAX_OPEN_FILES; i++){
