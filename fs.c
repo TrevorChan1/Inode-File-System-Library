@@ -131,6 +131,7 @@ int make_fs(const char *disk_name){
     memset(block_buf, 0, sizeof(block_buf));
     memcpy(block_buf, curSuper_block, sizeof(struct super_block));
     // printf("%lu %lu\n", sizeof(curSuper_block), sizeof(struct super_block));
+    
     if (block_write(0, block_buf) != 0){
         printf("ERROR: Failed to write super block to disk\n");
         return -1;
@@ -297,29 +298,39 @@ int umount_fs(const char *disk_name){
     // Second, save all metadata to the disk (only need to write superblock once)
 
     // Directory entries, then free allocated memory
-    if (block_write(1, curDir) != 0){
-        printf("ERROR: Failed to write directory entries to disk\n");
+    // Use a buffer with all unused bytes set to 0 (clear garbage before write)
+    char block_buf[BLOCK_SIZE];
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curDir, MAX_NUM_FILES * sizeof(struct dir_entry));
+    if (block_write(1, block_buf) != 0){
+        printf("ERROR: Failed to write directory entry block to disk\n");
         return -1;
     }
     free(curDir);
 
     // Free data bitmap, then free allocated memory
-    if (block_write(2, curFreeData) != 0){
-        printf("ERROR: Failed to write free data bitmap to disk\n");
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curFreeData, NUM_BLOCKS / 8 * sizeof(uint8_t));
+    if (block_write(2, block_buf) != 0){
+        printf("ERROR: Failed to write data free bitmap to disk\n");
         return -1;
     }
     free(curFreeData);
 
     // Free inode bitmap, then free allocated memory
-    if (block_write(3, curFreeInodes) != 0){
-        printf("ERROR: Failed to write free inode bitmap to disk\n");
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curFreeInodes, 8 * sizeof(uint8_t));
+    if (block_write(3, block_buf) != 0){
+        printf("ERROR: Failed to write inode free bitmap to disk\n");
         return -1;
     }
     free(curFreeInodes);
 
     // Inode table, then free allocated memory
-    if (block_write(4, curTable) != 0){
-        printf("ERROR: Failed to write free inode bitmap to disk\n");
+    memset(block_buf, 0, sizeof(block_buf));
+    memcpy(block_buf, curTable, MAX_NUM_FILES * sizeof(struct inode));
+    if (block_write(4, block_buf) != 0){
+        printf("ERROR: Failed to write inode table to disk\n");
         return -1;
     }
     free(curTable);
