@@ -579,7 +579,57 @@ int fs_delete(const char *name){
 
 // File system function that reads nbytes from file into buf
 int fs_read(int fd, void *buf, size_t nbyte){
-    return 0;
+    // Check if file descriptor is valid
+    if (!validfd(fd)){
+        return -1;
+    }
+
+    // Calculate number of blocks that can be read (assuming all metadata is correct)
+    int bytes_left;
+    int bytesRemaining = curTable[fileDescriptors[fd].inode].file_size - fileDescriptors[fd].file_offset;
+    
+    // If there are enough bytes to read nbyte bytes, set read to nbytes
+    if (bytesRemaining >= nbyte)
+        bytes_left = nbyte;
+    // If at end of file or file empty, set read to 0
+    else if (bytesRemaining <= 0)
+        bytes_left = 0;
+    else
+    // Otherwise, just set number able to read to the rest of the bytes left in the file
+        bytes_left = bytesRemaining;
+
+    // Initialize variables to be used when iterating through blocks
+    char block_buf[BLOCK_SIZE]; // Buffer that will read from blocks in disk
+    int cur_block = fileDescriptors[fd].file_offset / BLOCK_SIZE;       // Current block (starts based on offset)
+    int block_offset = fileDescriptors[fd].file_offset % BLOCK_SIZE;    // Byte offset (due to file offset)
+    int bytes_read = 0; // How many bytes have been read so far
+    struct inode node = curTable[fileDescriptors[fd].inode];    // inode
+
+    // Loop through reading block by block until there are no more bytes left to read
+    while (bytes_left > 0){
+        // Index into block number and read block into block buffer (TO ADD: INDIRECTION)
+        if (block_read(node.direct_offset[cur_block++], block_buf) != 0){
+            printf("ERROR: Unable to read from block\n");
+            return -1;
+        }
+
+        // Set the buffer size to be read from the file
+        int read_size = 0;
+        if (block_offset + bytes_left >= BLOCK_SIZE)    // If enough bytes left to read into next block
+            read_size = BLOCK_SIZE - block_offset;
+        else                    // If not enough bytes to read into next block, grab last bytes
+            read_size = bytes_left - block_offset;
+        
+        // Store bytes into the buf
+        memcpy(buf + bytes_read, block_buf, read_size);
+
+        // Prep for the next iteration of the loop (or for it to end)
+        bytes_read += read_size;
+        bytes_left -= read_size;
+        if (block_offset)
+            block_offset = 0;
+    }
+    return bytes_read;
 }
 
 // File system function that writes nbytes of buf into file using file descriptor
