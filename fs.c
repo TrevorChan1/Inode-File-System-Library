@@ -681,7 +681,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 block = node->direct_offset[cur_block];
         }
         // Case 2: Single indirect, check if need to create indirect block
-        if (cur_block >= 10 && cur_block < (BLOCK_SIZE / 2 + 10)){
+        else if (cur_block >= 10 && cur_block < (BLOCK_SIZE / 2 + 10)){
             // Create indirect block if not already set and update metadata
             if (node->single_indirect_offset == 0){
                 int indir_block = find1stFree(curFreeData, BLOCK_SIZE);
@@ -713,7 +713,14 @@ int fs_write(int fd, void *buf, size_t nbyte){
             }
             else
                 block = single_indirect_block[cur_block - 10];
-
+        }
+        // Case 3: Double indirection, have to read in double indirection block and individual indirection blocks
+        else if (cur_block >= (BLOCK_SIZE / 2 + 10) && cur_block < (BLOCK_SIZE * BLOCK_SIZE / 4 + BLOCK_SIZE / 2 + 10)){
+            printf("gotta make this whoops\n");
+        }
+        else {
+            printf("ERROR: Reached maximum file size\n");
+            return bytes_written;
         }
 
         // Calculate the number of blocks to be written on this write

@@ -4,9 +4,4 @@ CC = gcc
 # Build the threads.o file
 fs.o: fs.c fs.h
 
-# Build all of the test programs
-checkprogs: $(test_files)
-
-# Run the test programs
-check: checkprogs
-	tests/run_tests.sh $(test_files)
+test: disk.c fs.o test.c
