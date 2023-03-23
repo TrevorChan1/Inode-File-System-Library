@@ -138,8 +138,8 @@ int make_fs(const char *disk_name){
     // 2. Set up inodes, allocate memory, and set inode table
     curTable = (struct inode *) malloc(MAX_NUM_FILES * sizeof(struct inode));
     for (int i = 0; i < MAX_OPEN_FILES; i++){
-        curTable[i].double_indirect_offset = -1;
-        curTable[i].single_indirect_offset = -1;
+        curTable[i].double_indirect_offset = 0;
+        curTable[i].single_indirect_offset = 0;
     }
     
     memset(block_buf, 0, sizeof(block_buf));
@@ -555,7 +555,7 @@ int fs_delete(const char *name){
     // If single indirection is used, set that data block to free
     if(numblocks > 10){
         setNbit(curFreeData, NUM_BLOCKS, curTable[inum].single_indirect_offset, 1);
-        curTable[inum].single_indirect_offset = -1;
+        curTable[inum].single_indirect_offset = 0;
         // If double indirection is used, set each of the data blocks to free (single indirect = 1024 blocks + 10)
         if (numblocks > 1034){
             uint32_t * double_indirection_block = NULL;
@@ -569,7 +569,7 @@ int fs_delete(const char *name){
             }
             // Free double indirection block itself
             setNbit(curFreeData, NUM_BLOCKS, curTable[inum].double_indirect_offset, 1);
-            curTable[inum].double_indirect_offset = -1;
+            curTable[inum].double_indirect_offset = 0;
         }
     }
     curTable[inum].file_size = 0;
@@ -646,8 +646,10 @@ int fs_write(int fd, void *buf, size_t nbyte){
     int cur_block = fileDescriptors[fd].file_offset / BLOCK_SIZE;       // Current block (starts based on offset)
     int block_offset = fileDescriptors[fd].file_offset % BLOCK_SIZE;    // Byte offset (due to file offset)
     struct inode * node = &curTable[fileDescriptors[fd].inode];
+    uint16_t single_indirect_block[BLOCK_SIZE / 2];
     int bytes_written = 0;
     int bytes_left = nbyte;
+    int single_indir_open = 0;
 
     // Calculate the number of blocks that will be written to (accounting for nonzero offsets)
     int num_block_write = (nbyte + block_offset) / BLOCK_SIZE;
@@ -661,17 +663,59 @@ int fs_write(int fd, void *buf, size_t nbyte){
         uint16_t block;
         if (node->file_size == 0 || node->file_size < (BLOCK_SIZE * (cur_block))){
             new_block = 1;
-            block = find1stFree(curFreeData, BLOCK_SIZE);
-            // If full, return bytes_written (number of bytes currently written to disk)
-            if (block < 0){
-                printf("ERROR: Disk is full\n");
-                return bytes_written;
-            }
         }
         // If writing to a block that already exists, simply set block number to current block
-        else 
-            block = node->direct_offset[cur_block];  // TO DO: Helper function that calculates block number given inode
-        
+
+        // Set which block writing to (check if direct, single indirect, or double indirect)
+        // Case 1: Direct, if new block allocate but otherwise just set to next one in direct
+        if (cur_block < 10){
+            if (new_block){
+                block = find1stFree(curFreeData, BLOCK_SIZE);
+                // If full, return bytes_written (number of bytes currently written to disk)
+                if (block < 0){
+                    printf("ERROR: Disk is full\n");
+                    return bytes_written;
+                }
+            }
+            else
+                block = node->direct_offset[cur_block];
+        }
+        // Case 2: Single indirect, check if need to create indirect block
+        if (cur_block >= 10 && cur_block < (BLOCK_SIZE / 2 + 10)){
+            // Create indirect block if not already set and update metadata
+            if (node->single_indirect_offset == 0){
+                int indir_block = find1stFree(curFreeData, BLOCK_SIZE);
+                if (indir_block < 0){
+                    printf("ERROR: Disk is full\n");
+                    return bytes_written;
+                }
+                setNbit(curFreeData, BLOCK_SIZE, indir_block, 0);
+                node->single_indirect_offset = indir_block;
+            }
+            
+            // Check if single indirect block has been read from yet (don't want to open twice)
+            if (!single_indir_open){
+                if (block_read(node->single_indirect_offset, single_indirect_block) < 0){
+                    printf("ERROR: Failed to read single indirect offset block\n");
+                    return bytes_written;
+                }
+                single_indir_open = 1;
+            }
+
+            // Repeat code but done so that will only find 1st free block if had space to create indirect
+            if (new_block){
+                block = find1stFree(curFreeData, BLOCK_SIZE);
+                // If full, return bytes_written (number of bytes currently written to disk)
+                if (block < 0){
+                    printf("ERROR: Disk is full\n");
+                    return bytes_written;
+                }
+            }
+            else
+                block = single_indirect_block[cur_block - 10];
+
+        }
+
         // Calculate the number of blocks to be written on this write
         int this_write = 0;
         if (bytes_left + block_offset >= BLOCK_SIZE)
@@ -690,6 +734,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 return bytes_written;
             }
         }
+
         // Write to location block_buf + offset this_write bytes
         memcpy(block_buf + block_offset, buf + bytes_written, this_write);
         if (block_write(block, block_buf) != 0){
@@ -761,5 +806,18 @@ int fs_lseek(int fd, off_t offset){
 
 // File system function that truncates bytes (can't extend length)
 int fs_truncate(int fd, off_t length){
+    // Check if file descriptor is valid
+    if (!validfd(fd)){
+        return -1;
+    }
+
+    // Check if requested length is greater than the file size
+    if (length + fileDescriptors[fd].file_offset > curTable[fileDescriptors[fd].inode].file_size){
+        printf("ERROR: Requested file length exceeds file size\n");
+        return -1;
+    }
+
+
+
     return 0;
 }
