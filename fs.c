@@ -590,7 +590,9 @@ int fs_read(int fd, void *buf, size_t nbyte){
     int cur_block = fileDescriptors[fd].file_offset / BLOCK_SIZE;       // Current block (starts based on offset)
     int block_offset = fileDescriptors[fd].file_offset % BLOCK_SIZE;    // Byte offset (due to file offset)
     int bytes_read = 0; // How many bytes have been read so far
-    struct inode node = curTable[fileDescriptors[fd].inode];    // inode
+    struct inode * node = &curTable[fileDescriptors[fd].inode];    // inode
+    uint16_t single_indirect_block[BLOCK_SIZE/2];
+    int single_indirect_open = 0;
 
     // Calculate number of blocks that can be read (assuming all metadata is correct)
     int bytes_left;
@@ -608,8 +610,33 @@ int fs_read(int fd, void *buf, size_t nbyte){
 
     // Loop through reading block by block until there are no more bytes left to read
     while (bytes_left > 0){
+
+        // Calculate the block number (mainly for indirection purposes)
+        int block;
+        // Case 1: Direct block number, just use regular index
+        if (cur_block < 10)
+            block = node->direct_offset[cur_block];
+        // Case 2: Single indirection = read from
+        else if (cur_block >= 10 && cur_block < (BLOCK_SIZE / 2 + 10)){
+            // Check if single indirect block has been read from yet (don't want to open twice)
+            if (!single_indirect_open){
+                if (block_read(node->single_indirect_offset, single_indirect_block) < 0){
+                    printf("ERROR: Failed to read single indirect offset block\n");
+                    return bytes_read;
+                }
+                single_indirect_open = 1;
+            }
+
+            // Read block number from the single indirect block
+            block = single_indirect_block[cur_block - 10];
+        }
+        // Case 3: Double indirection (to do)
+        else{
+            block = 0;
+        }
+
         // Index into block number and read block into block buffer (TO ADD: INDIRECTION)
-        if (block_read(node.direct_offset[cur_block++], block_buf) != 0){
+        if (block_read(block, block_buf) != 0){
             printf("ERROR: Unable to read from block\n");
             return -1;
         }
@@ -651,6 +678,12 @@ int fs_write(int fd, void *buf, size_t nbyte){
     int bytes_left = nbyte;
     int single_indir_open = 0;
 
+    //Variables for double indirection
+    int double_indir_open = 0;
+    uint16_t double_indir_block[BLOCK_SIZE/2];
+    uint16_t current_double_block[BLOCK_SIZE/2];
+    int current_open_double = -1;
+
     // Calculate the number of blocks that will be written to (accounting for nonzero offsets)
     int num_block_write = (nbyte + block_offset) / BLOCK_SIZE;
     if ((nbyte + block_offset) % BLOCK_SIZE) num_block_write++;
@@ -661,6 +694,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
         // If writing current block requires a new block, grab first free block to be used
         uint8_t new_block = 0;
         uint16_t block;
+        int double_index = (cur_block - 10 - BLOCK_SIZE) / BLOCK_SIZE;
+        int double_offset = (cur_block - 10 - BLOCK_SIZE) % BLOCK_SIZE;
+
         if (node->file_size == 0 || node->file_size < (BLOCK_SIZE * (cur_block))){
             new_block = 1;
         }
@@ -670,12 +706,14 @@ int fs_write(int fd, void *buf, size_t nbyte){
         // Case 1: Direct, if new block allocate but otherwise just set to next one in direct
         if (cur_block < 10){
             if (new_block){
-                block = find1stFree(curFreeData, BLOCK_SIZE);
+                block = find1stFree(curFreeData, NUM_BLOCKS);
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
                 }
+                node->direct_offset[cur_block] = block;
+                setNbit(curFreeData, NUM_BLOCKS, block, 0);
             }
             else
                 block = node->direct_offset[cur_block];
@@ -684,12 +722,12 @@ int fs_write(int fd, void *buf, size_t nbyte){
         else if (cur_block >= 10 && cur_block < (BLOCK_SIZE / 2 + 10)){
             // Create indirect block if not already set and update metadata
             if (node->single_indirect_offset == 0){
-                int indir_block = find1stFree(curFreeData, BLOCK_SIZE);
+                int indir_block = find1stFree(curFreeData, NUM_BLOCKS);
                 if (indir_block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
                 }
-                setNbit(curFreeData, BLOCK_SIZE, indir_block, 0);
+                setNbit(curFreeData, NUM_BLOCKS, indir_block, 0);
                 node->single_indirect_offset = indir_block;
             }
             
@@ -704,19 +742,86 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
             // Repeat code but done so that will only find 1st free block if had space to create indirect
             if (new_block){
-                block = find1stFree(curFreeData, BLOCK_SIZE);
+                block = find1stFree(curFreeData, NUM_BLOCKS);
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
                 }
+                single_indirect_block[cur_block - 10] = block;
+                setNbit(curFreeData, NUM_BLOCKS, block, 0);
             }
             else
                 block = single_indirect_block[cur_block - 10];
         }
         // Case 3: Double indirection, have to read in double indirection block and individual indirection blocks
         else if (cur_block >= (BLOCK_SIZE / 2 + 10) && cur_block < (BLOCK_SIZE * BLOCK_SIZE / 4 + BLOCK_SIZE / 2 + 10)){
-            printf("gotta make this whoops\n");
+            
+            // Create double indirection block
+            if (node->double_indirect_offset == 0){
+                int free_double = find1stFree(curFreeData, NUM_BLOCKS);
+                if (free_double < 0){
+                    printf("ERROR: Not enough disk space to allocate double block\n");
+                    return bytes_written;
+                }
+                char zeros[BLOCK_SIZE];
+                memset(zeros, 0, BLOCK_SIZE);
+                if (block_write(free_double, zeros) < 0){
+                    printf("ERROR: Failed to write double indirection to disk\n");
+                    return bytes_written;
+                }
+                setNbit(curFreeData, NUM_BLOCKS, free_double, 0);
+                node->double_indirect_offset = free_double;
+            }
+
+            // Open double indirection block
+            if (!double_indir_open){
+                if (block_read(node->double_indirect_offset, double_indir_block) < 0){
+                    printf("ERROR: Failed to read double indirection block from disk\n");
+                    return bytes_written;
+                }
+            }
+
+            // Check if in the correct double indirection block
+            if (double_index != current_open_double){
+                // If single indir block in double indirection block isn't made, initialize it
+                if (double_indir_block[double_index] == 0){
+                    int free_single = find1stFree(curFreeData, NUM_BLOCKS);
+                    if (free_single < 0){
+                        printf("ERROR: Not enough disk space to write indirection block\n");
+                        return bytes_written;
+                    }
+                    // Initialize to all zeros
+                    char zeros[BLOCK_SIZE];
+                    memset(zeros, 0, BLOCK_SIZE);
+                    if (block_write(free_single, zeros) < 0){
+                        printf("ERROR: Failed to write double indirection to disk\n");
+                        return bytes_written;
+                    }
+                    
+                    setNbit(curFreeData, NUM_BLOCKS, free_single, 0);
+                    double_indir_block[double_index] = free_single;
+                }
+                // Set the double indirection block and index
+                if (block_read(double_indir_block[double_index], current_double_block) < 0){
+                    printf("ERROR: Failed to read single indirection block from disk\n");
+                    current_open_double = double_index;
+                }
+            }
+
+            // Now have the single indirection block, so find block number
+            if (new_block){
+                block = find1stFree(curFreeData, NUM_BLOCKS);
+                // If full, return bytes_written (number of bytes currently written to disk)
+                if (block < 0){
+                    printf("ERROR: Disk is full\n");
+                    return bytes_written;
+                }
+                current_double_block[double_offset] = block;
+                setNbit(curFreeData, NUM_BLOCKS, block, 0);
+            }
+            else
+                block = current_double_block[double_offset];
         }
         else {
             printf("ERROR: Reached maximum file size\n");
@@ -751,8 +856,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
         // Once done writing, if it was a new block set metadata to reflect that
         if (new_block){
-            node->direct_offset[cur_block] = block;
-            setNbit(curFreeData, BLOCK_SIZE, block, 0);
+            
         }
         // Prepare for next write
         if (block_offset) block_offset = 0;
