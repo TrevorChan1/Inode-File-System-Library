@@ -551,28 +551,71 @@ int fs_delete(const char *name){
     setNbit(curFreeInodes, MAX_NUM_FILES, inum, 1);
     
     // 3. Free inode values (all indirect blocks)
-    int numblocks = curTable[inum].file_size / 4096;
-    // If single indirection is used, set that data block to free
-    if(numblocks > 10){
+    int numblocks = (curTable[inum].file_size / BLOCK_SIZE) + (curTable[inum].file_size % BLOCK_SIZE);
+    uint16_t single_indir_block[BLOCK_SIZE / 2];
+    uint16_t double_indir_block[BLOCK_SIZE/2];
+    uint16_t current_double_block[BLOCK_SIZE/2];
+
+    int num_direct = 10;
+    if (numblocks < 10)
+        num_direct = numblocks;
+
+    // Free all direct offsets
+    for (int i = 0; i < num_direct; i++){
+        setNbit(curFreeData, NUM_BLOCKS, curTable[inum].direct_offset[i], 1);
+        curTable[inum].direct_offset[i] = 0;
+    }
+
+    // Free all indirect offsets (if there are any)
+    if (numblocks > 10){
+        if (block_read(curTable[inum].single_indirect_offset, single_indir_block) < 0){
+            printf("ERROR: Failed to read single indirection block from disk\n");
+            return -1;
+        }
+
+        int index = 0;
+        while ((index < BLOCK_SIZE/2) && (single_indir_block[index] != 0)){
+            setNbit(curFreeData, NUM_BLOCKS, single_indir_block[index], 1);
+            index++;
+        }
+        // Free the single indirection offset value
         setNbit(curFreeData, NUM_BLOCKS, curTable[inum].single_indirect_offset, 1);
-        curTable[inum].single_indirect_offset = 0;
-        // If double indirection is used, set each of the data blocks to free (single indirect = 1024 blocks + 10)
-        if (numblocks > 1034){
-            uint32_t * double_indirection_block = NULL;
-            if (block_read(curTable[inum].double_indirect_offset, double_indirection_block) != 0){
-                printf("ERROR: Failed to read from double indirection block\n");
+    }
+    
+    // Free all double indirection offsets (if there are any)
+    if (numblocks > (10 + BLOCK_SIZE / 2)){
+        if (block_read(curTable[inum].double_indirect_offset, double_indir_block) < 0){
+            printf("ERROR: Failed to read single indirection block from disk\n");
+            return -1;
+        }
+        
+        int double_index = 0;
+        while ((double_index < BLOCK_SIZE/2) && (double_indir_block[double_index] != 0)){
+            if (block_read(double_indir_block[double_index], current_double_block) < 0){
+                printf("ERROR: Failed to read single indirection block from disk\n");
                 return -1;
             }
-            // Iterate through all single indirection blocks pointed to by double indirection and free
-            for (int i = 0; i < numblocks; i++){
-                setNbit(curFreeData, NUM_BLOCKS, double_indirection_block[i], 1);
+            int single_index = 0;
+            // Free each block in each value of the double indirection block (and the blocks that hold them)
+            while ((single_index < BLOCK_SIZE/2) && (current_double_block[single_index] != 0)){
+                setNbit(curFreeData, NUM_BLOCKS, current_double_block[single_index], 1);
+                single_index++;
             }
-            // Free double indirection block itself
-            setNbit(curFreeData, NUM_BLOCKS, curTable[inum].double_indirect_offset, 1);
-            curTable[inum].double_indirect_offset = 0;
+            
+            // Free the single indirection block that was just iterated through
+            setNbit(curFreeData, NUM_BLOCKS, double_indir_block[double_index], 1);
+            double_index++;
+
         }
+
+        // Free the double indirection offset value
+        setNbit(curFreeData, NUM_BLOCKS, curTable[inum].double_indirect_offset, 1);
     }
+
+    
     curTable[inum].file_size = 0;
+    curTable[inum].single_indirect_offset = 0;
+    curTable[inum].double_indirect_offset = 0;
 
 
     return 0;
