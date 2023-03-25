@@ -15,7 +15,7 @@ int main(){
     char n[2];
     int num_written = 0;
     int num_read = 0;
-    for (int i = 0; i < 4096 * 2060; i++){
+    for (int i = 0; i < 4096 * 4096; i++){
         int wrote = fs_write(fd, m, 1);
         if (wrote <= 0){
             printf("didn't work\n");
@@ -24,7 +24,7 @@ int main(){
         num_written += wrote;
     }
     printf("Bytes written: %d\n", num_written);
-    for (int j = 0; j < 4096 * 2060; j++){
+    for (int j = 0; j < 4096 * 4096; j++){
         int read = fs_read(fd2, n, 1);
         if (read <= 0){
             printf("read didn't work\n");
@@ -40,3 +40,24 @@ int main(){
     return 0;
 }
 
+
+
+// int main(){
+//     printf("%d\n", make_fs("test_fs"));
+//     printf("%d\n", mount_fs("test_fs"));
+//     printf("%d\n", fs_create("hai.txt"));
+//     printf("%d\n", fs_create("hai2.txt"));
+//     printf("%d\n", fs_create("hai3.txt"));
+//     int fd = fs_open("hai.txt");
+//     int fd2 = fs_open("hai.txt");
+//     char * m = "hello!";
+//     char n[7];
+
+//     fs_write(fd, m, 7);
+
+//     fs_read(fd2, n, 7);
+//     printf("%s\n", n);
+
+    
+//     return 0;
+// }
