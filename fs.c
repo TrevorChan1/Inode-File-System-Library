@@ -551,7 +551,9 @@ int fs_delete(const char *name){
     setNbit(curFreeInodes, MAX_NUM_FILES, inum, 1);
     
     // 3. Free inode values (all indirect blocks)
-    int numblocks = (curTable[inum].file_size / BLOCK_SIZE) + (curTable[inum].file_size % BLOCK_SIZE);
+    int numblocks = (curTable[inum].file_size / BLOCK_SIZE);
+    if (curTable[inum].file_size % BLOCK_SIZE)
+        numblocks++;
     uint16_t single_indir_block[BLOCK_SIZE / 2];
     uint16_t double_indir_block[BLOCK_SIZE/2];
     uint16_t current_double_block[BLOCK_SIZE/2];
@@ -995,12 +997,100 @@ int fs_truncate(int fd, off_t length){
         return -1;
     }
 
+    struct inode * node = &curTable[fileDescriptors[fd].inode];
+
     // Check if requested length is greater than the file size
-    if (length + fileDescriptors[fd].file_offset > curTable[fileDescriptors[fd].inode].file_size){
+    if (length > node->file_size){
         printf("ERROR: Requested file length exceeds file size\n");
         return -1;
     }
 
+    // If no change is made to the length, do nothing
+    if (length == node->file_size)
+        return 0;
+
+
+    int bytes_delete = node->file_size - length;
+    int blocks_delete = bytes_delete / BLOCK_SIZE;
+
+    int block_start = (length / BLOCK_SIZE);
+    int block_offset = length % BLOCK_SIZE;
+
+    // If there are bytes in a block being deleted, delete them (sets them to zeros)
+    if (block_offset){
+        char read_buf[BLOCK_SIZE];
+        char write_buf[BLOCK_SIZE];
+
+        if (block_start < 10){
+            if (block_read(node->direct_offset[block_start], read_buf) < 0){
+                printf("ERROR: Failed to read block from disk\n");
+                return -1;
+            }
+            memset(write_buf, 0, BLOCK_SIZE);
+            memcpy(write_buf, read_buf, block_offset);
+
+            if (block_write(node->direct_offset[block_start], write_buf) < 0){
+                printf("ERROR: Failed to write block to disk\n");
+                return -1;
+            }
+        }
+        else{
+            uint16_t single_indir_block[BLOCK_SIZE / 2];
+            if (block_read(node->single_indirect_offset, single_indir_block) < 0){
+                printf("ERROR: Failed to read single indirection block from disk\n");
+                return -1;
+            }
+
+            if (block_read(single_indir_block[block_start - 10], read_buf) < 0){
+                printf("ERROR: Failed to read single indirection block from disk\n");
+                return -1;
+            }
+
+            memset(write_buf, 0, BLOCK_SIZE);
+            memcpy(write_buf, read_buf, block_offset);
+
+            if (block_read(single_indir_block[block_start - 10], write_buf) < 0){
+                printf("ERROR: Failed to write single indirection block to disk\n");
+                return -1;
+            }
+        }
+
+        block_start++;
+    }
+    uint16_t single_indir_block[BLOCK_SIZE/2];
+    int single_indir_open = 0;
+
+    // Now, all the blocks should just be FULL blocks (don't need to set to zeros, just free the disk block)
+    for (int i = block_start; i < block_start + blocks_delete; i++){
+        // Case 1: Direct offset
+        if (i < 10){
+            setNbit(curFreeData, NUM_BLOCKS, node->direct_offset[i], 1);
+            node->direct_offset[i] = 0;
+        }
+        // Case 2: Single indirect offset
+        else{
+            // If first time reading from single indirection block, grab it from memory
+            if (!single_indir_open){
+                if (block_read(node->single_indirect_offset, single_indir_block) < 0){
+                    printf("ERROR: Failed to read single indirection block from disk\n");
+                    return -1;
+                }
+            }
+            setNbit(curFreeData, NUM_BLOCKS, single_indir_block[i - 10], 1);
+            single_indir_block[i - 10] = 0;
+        }
+    }
+    if (single_indir_open){
+        if (block_write(node->single_indirect_offset, single_indir_block) < 0){
+            printf("ERROR: Failed to update single indirection block to disk\n");
+            return -1;
+        }
+    }
+
+    // Update file length (and file descriptor offset if necessary)
+    node->file_size = length;
+    if (node->file_size < fileDescriptors[fd].file_offset)
+        fileDescriptors[fd].file_offset = length;
 
 
     return 0;
