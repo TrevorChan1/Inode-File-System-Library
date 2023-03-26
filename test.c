@@ -15,7 +15,7 @@ int main(){
     char n[2];
     int num_written = 0;
     int num_read = 0;
-    for (int i = 0; i < 4096 * 4096; i++){
+    for (int i = 0; i < 4096 * 1; i++){
         int wrote = fs_write(fd, m, 1);
         if (wrote <= 0){
             printf("didn't work\n");
@@ -24,7 +24,7 @@ int main(){
         num_written += wrote;
     }
     printf("Bytes written: %d\n", num_written);
-    for (int j = 0; j < 4096 * 4096; j++){
+    for (int j = 0; j < 4096 * 1; j++){
         int read = fs_read(fd2, n, 1);
         if (read <= 0){
             printf("read didn't work\n");
@@ -36,6 +36,7 @@ int main(){
 
     printf("Bytes written: %d\n", num_written);
     printf("Bytes read: %d\n", num_read);
+    printf("File size: %d\n", fs_get_filesize(fd2));
     
     return 0;
 }

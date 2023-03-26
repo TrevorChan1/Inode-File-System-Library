@@ -949,6 +949,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
         if (block_offset) block_offset = 0;
         bytes_written += this_write;
         node->file_size += bytes_written;
+
         fileDescriptors[fd].file_offset += bytes_written;
         cur_block++;
 
@@ -976,7 +977,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
 int fs_get_filesize(int fd){
     
     // Check if the file descriptor is valid
-    if (!validfd(fd)){
+    if (validfd(fd) != 0){
         return -1;
     }
 
@@ -1004,7 +1005,7 @@ int fs_listfiles(char ***files){
 int fs_lseek(int fd, off_t offset){
     
     // Check if file descriptor is valid
-    if (!validfd(fd)){
+    if (validfd(fd) != 0){
         return -1;
     }
 
@@ -1022,7 +1023,7 @@ int fs_lseek(int fd, off_t offset){
 // File system function that truncates bytes (can't extend length)
 int fs_truncate(int fd, off_t length){
     // Check if file descriptor is valid
-    if (!validfd(fd)){
+    if (validfd(fd) != 0){
         return -1;
     }
 
