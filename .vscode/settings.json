@@ -12,6 +12,7 @@
         "utility": "c",
         "vector": "c",
         "__config": "c",
-        "locale": "c"
+        "locale": "c",
+        "fs.h": "c"
     }
 }

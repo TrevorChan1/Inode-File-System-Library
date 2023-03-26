@@ -235,17 +235,16 @@ int mount_fs(const char *disk_name){
     // printf("%d %d %d %d\n", block_dir, block_freedata, block_freeinode, block_inodes);
 
     // 2. Load inode table based on superblock
-    struct inode * curTable = (struct inode *) malloc(MAX_NUM_FILES * sizeof(struct inode));
+    curTable = (struct inode *) malloc(MAX_NUM_FILES * sizeof(struct inode));
     if (block_read(block_inodes, block_buf) < 0){
         printf("ERROR: Failed to load inode table\n");
         return -1;
     }
     // Only read bytes need
     memcpy(curTable, block_buf, MAX_NUM_FILES * sizeof(struct inode));
-    // printf("%d\n", curTable[0].double_indirect_offset);
 
     // 3. Load directory entries based on superblock
-    struct dir_entry * curDir = (struct dir_entry *) malloc(MAX_NUM_FILES * sizeof(struct dir_entry));
+    curDir = (struct dir_entry *) malloc(MAX_NUM_FILES * sizeof(struct dir_entry));
     if (block_read(block_dir, block_buf) < 0){
         printf("ERROR: Failed to load directory entries\n");
         return -1;
@@ -254,25 +253,26 @@ int mount_fs(const char *disk_name){
 
     file_count = 0;
     for (int i = 0; i < MAX_NUM_FILES; i++){
-        if (curDir[i].is_used)
+        if (curDir[i].is_used){
             file_count++;
+        }
     }
 
     // 4. Load inode free bitmap based on superblock
-    uint8_t * free_inode_bitmap = (uint8_t *) malloc(8 * sizeof(uint8_t));
+    curFreeInodes = (uint8_t *) malloc(8 * sizeof(uint8_t));
     if (block_read(block_freeinode, block_buf) < 0){
         printf("ERROR: Failed to load free inode bitmap\n");
         return -1;
     }
-    memcpy(free_inode_bitmap, block_buf, 8 * sizeof(uint8_t));
+    memcpy(curFreeInodes, block_buf, 8 * sizeof(uint8_t));
 
     // 5. Load data free bitmap based on superblock
-    uint8_t * free_block_bitmap = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
+    uint8_t * curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
     if (block_read(block_freedata, block_buf) < 0){
         printf("ERROR: Failed to load free data bitmap\n");
         return -1;
     }
-    memcpy(free_block_bitmap, block_buf, NUM_BLOCKS / 8 * sizeof(uint8_t));
+    memcpy(curFreeData, block_buf, NUM_BLOCKS / 8 * sizeof(uint8_t));
 
     // 6. Initialize all file descriptors to closed and offset 0
     for (int i = 0; i < MAX_OPEN_FILES; i++){
@@ -286,12 +286,6 @@ int mount_fs(const char *disk_name){
 
 // Disk function that unmounts virtual disk and saves any changes made to file system
 int umount_fs(const char *disk_name){
-
-    if (open_disk(disk_name) == 0){
-        printf("ERROR: Not an open disk\n");
-        close_disk();
-        return -1;
-    }
 
     // Second, save all metadata to the disk (only need to write superblock once)
 
@@ -670,7 +664,6 @@ int fs_read(int fd, void *buf, size_t nbyte){
             block = node->direct_offset[cur_block];
         // Case 2: Single indirection = read from
         else if (cur_block >= 10 && cur_block < (BLOCK_SIZE / 2 + 10)){
-            printf("read single indirection\n");
             // Check if single indirect block has been read from yet (don't want to open twice)
             if (!single_indirect_open){
                 if (block_read(node->single_indirect_offset, single_indirect_block) < 0){
@@ -685,7 +678,6 @@ int fs_read(int fd, void *buf, size_t nbyte){
         }
         // Case 3: Double indirection, read from blocks assuming that double indirection exists if got here
         else if (cur_block >= (BLOCK_SIZE / 2 + 10) && cur_block < (BLOCK_SIZE * BLOCK_SIZE / 4 + BLOCK_SIZE / 2 + 10)){
-            printf("read double indirection\n");
             // Open double indirection block
             if (!double_indir_open){
                 if (block_read(node->double_indirect_offset, double_indir_block) < 0){
@@ -772,7 +764,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
         int double_index = (cur_block - 10 - BLOCK_SIZE) / BLOCK_SIZE;
         int double_offset = (cur_block - 10 - BLOCK_SIZE) % BLOCK_SIZE;
 
-        if (node->file_size == 0 || node->file_size < (BLOCK_SIZE * (cur_block))){
+        if (node->file_size == 0 || node->file_size <= (BLOCK_SIZE * (cur_block))){
             new_block = 1;
         }
         // If writing to a block that already exists, simply set block number to current block
@@ -948,8 +940,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
         // Prepare for next write
         if (block_offset) block_offset = 0;
         bytes_written += this_write;
-        node->file_size += bytes_written;
-
+        bytes_left -= this_write;
+        
+        node->file_size += this_write;
         fileDescriptors[fd].file_offset += bytes_written;
         cur_block++;
 
@@ -991,9 +984,11 @@ int fs_listfiles(char ***files){
     int curNum = 0;
     for (int i = 0; i < MAX_NUM_FILES; i++){
         if (curDir[i].is_used){
-            *files[curNum++] = curDir[i].name;
+            strncpy(*files[curNum++], curDir[i].name, 15);
         }
     }
+    // Set last value to be NULL
+    *files[curNum] = NULL;
 
     if (curNum == 0)
         printf("No files found\n");
