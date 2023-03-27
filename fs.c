@@ -709,7 +709,7 @@ int fs_read(int fd, void *buf, size_t nbyte){
             return -1;
         }
         
-        printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
+        // printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
 
         // Set the buffer size to be read from the file
         int read_size = 0;
@@ -843,9 +843,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     return bytes_written;
                 }
                 char zeros[BLOCK_SIZE];
-                for (int i = 0; i < BLOCK_SIZE; i++){
-                        zeros[i] = 0;
-                    }
+                memset(zeros, 0, BLOCK_SIZE);
                 if (block_write(free_double, zeros) < 0){
                     printf("ERROR: Failed to write double indirection to disk\n");
                     return bytes_written;
@@ -875,9 +873,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     }
                     // Initialize to all zeros
                     char zeros[BLOCK_SIZE];
-                    for (int i = 0; i < BLOCK_SIZE; i++){
-                        zeros[i] = 0;
-                    }
+                    memset(zeros, 0, BLOCK_SIZE);
                     if (block_write(free_single, zeros) < 0){
                         printf("ERROR: Failed to write double indirection to disk\n");
                         return bytes_written;
@@ -890,6 +886,13 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 if (block_read(double_indir_block[double_index], current_double_block) < 0){
                     printf("ERROR: Failed to read single indirection block from disk\n");
                 }
+                if (cur_block == 2058){
+                    for(int i = 0; i < 2048; i++){
+                        if (current_double_block[i] != 0)
+                            printf("%d\n", i);
+                    }
+                }
+
                 current_open_double = double_index;
             }
 
@@ -922,7 +925,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
             return bytes_written;
         }
 
-        printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
+        // printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
         // Calculate the number of blocks to be written on this write
         int this_write = 0;
         if (bytes_left + block_offset >= BLOCK_SIZE)
