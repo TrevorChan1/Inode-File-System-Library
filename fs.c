@@ -843,7 +843,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     return bytes_written;
                 }
                 char zeros[BLOCK_SIZE];
-                memset(zeros, 0, BLOCK_SIZE);
+                for (int i = 0; i < BLOCK_SIZE; i++){
+                        zeros[i] = 0;
+                    }
                 if (block_write(free_double, zeros) < 0){
                     printf("ERROR: Failed to write double indirection to disk\n");
                     return bytes_written;
@@ -873,7 +875,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     }
                     // Initialize to all zeros
                     char zeros[BLOCK_SIZE];
-                    memset(zeros, 0, BLOCK_SIZE);
+                    for (int i = 0; i < BLOCK_SIZE; i++){
+                        zeros[i] = 0;
+                    }
                     if (block_write(free_single, zeros) < 0){
                         printf("ERROR: Failed to write double indirection to disk\n");
                         return bytes_written;
