@@ -991,17 +991,18 @@ int fs_get_filesize(int fd){
 int fs_listfiles(char ***files){
     // Iterate through all files in directory, if open then add name
     int curNum = 0;
+    char ** values = (char**) malloc(15 * MAX_NUM_FILES);
     for (int i = 0; i < MAX_NUM_FILES; i++){
         if (curDir[i].is_used){
-            strncpy(*files[curNum++], curDir[i].name, 15);
+            char * name = (char*) malloc(16 * sizeof(char));
+            strncpy(name, curDir[i].name, 15);
+            *(values + curNum) = name;
+            curNum++;
         }
     }
     // Set last value to be NULL
-    files[curNum] = NULL;
-
-    if (curNum == 0)
-        printf("No files found\n");
-
+    *(values + curNum) = NULL;
+    *files = values;
     return 0;
 }
 
