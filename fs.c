@@ -655,8 +655,8 @@ int fs_read(int fd, void *buf, size_t nbyte){
 
         // Calculate the block number (mainly for indirection purposes)
         int block;
-        int double_index = (cur_block - 10 - BLOCK_SIZE) / (BLOCK_SIZE / 2);
-        int double_offset = (cur_block - 10 - BLOCK_SIZE) % (BLOCK_SIZE / 2);
+        int double_index = (cur_block - 10 - BLOCK_SIZE/2) / (BLOCK_SIZE / 2);
+        int double_offset = (cur_block - 10 - BLOCK_SIZE/2) % (BLOCK_SIZE / 2);
         // Case 1: Direct block number, just use regular index
         if (cur_block < 10)
             block = node->direct_offset[cur_block];
@@ -824,9 +824,6 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
-                    for (int i = 0; i < NUM_BLOCKS / 8; i++){
-                        printf("%d\n", curFreeData[i]);
-                    }
                     return bytes_written;
                 }
                 single_indirect_block[cur_block - 10] = block;
@@ -862,6 +859,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     printf("ERROR: Failed to read double indirection block from disk\n");
                     return bytes_written;
                 }
+                double_indir_open = 1;
                 // printf("!write double indirect open\n");
             }
 
@@ -890,7 +888,6 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 if (block_read(double_indir_block[double_index], current_double_block) < 0){
                     printf("ERROR: Failed to read single indirection block from disk\n");
                 }
-
                 current_open_double = double_index;
             }
 
@@ -959,6 +956,18 @@ int fs_write(int fd, void *buf, size_t nbyte){
         node->file_size += this_write;
         fileDescriptors[fd].file_offset += this_write;
         cur_block++;
+
+        if (double_indir_open){
+            if (block_write(node->double_indirect_offset, double_indir_block) < 0){
+                printf("ERROR: Failed to update double indirection block\n");
+                return bytes_written;
+            }
+
+            if (block_write(double_indir_block[double_index], current_double_block) < 0){
+                printf("ERROR: Failed to update double indirection block\n");
+                return bytes_written;
+            }
+        }
 
         // If done, then update the indirection blocks
         if (bytes_left == 0){

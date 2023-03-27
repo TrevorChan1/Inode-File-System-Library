@@ -15,7 +15,7 @@ int main(){
     char n[8000];
     int num_written = 0;
     int num_read = 0;
-    for (int i = 0; i < 3750; i++){
+    for (int i = 0; i < 5000; i++){
         int wrote = fs_write(fd, m, 8000);
         if (wrote <= 0){
             printf("didn't work\n");
@@ -24,7 +24,7 @@ int main(){
         num_written += wrote;
     }
     printf("Bytes written: %d\n", num_written);
-    for (int j = 0; j < 3750; j++){
+    for (int j = 0; j < 5000; j++){
         int read = fs_read(fd2, n, 8000);
         if (read <= 0){
             printf("read didn't work: %d\n", j);
