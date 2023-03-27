@@ -886,12 +886,6 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 if (block_read(double_indir_block[double_index], current_double_block) < 0){
                     printf("ERROR: Failed to read single indirection block from disk\n");
                 }
-                if (cur_block == 2058){
-                    for(int i = 0; i < 2048; i++){
-                        if (current_double_block[i] != 0)
-                            printf("%d\n", i);
-                    }
-                }
 
                 current_open_double = double_index;
             }
