@@ -767,7 +767,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
         int double_index = (cur_block - 10 - BLOCK_SIZE) / (BLOCK_SIZE / 2);
         int double_offset = (cur_block - 10 - BLOCK_SIZE) % (BLOCK_SIZE / 2);
 
-        if (node->file_size == 0 || node->file_size <= (BLOCK_SIZE * (cur_block))){
+        if (node->file_size == 0 || (node->file_size <= (BLOCK_SIZE * (cur_block)))){
             new_block = 1;
         }
         // If writing to a block that already exists, simply set block number to current block
@@ -866,6 +866,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
             if (double_index != current_open_double || (current_open_double == -1)){
                 // If single indir block in double indirection block isn't made, initialize it
                 if (double_indir_block[double_index] == 0){
+                    printf("here\n")
                     int free_single = find1stFree(curFreeData, NUM_BLOCKS);
                     if (free_single < 0){
                         printf("ERROR: Not enough disk space to write indirection block\n");
