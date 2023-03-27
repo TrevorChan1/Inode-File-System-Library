@@ -853,6 +853,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 }
                 setNbit(curFreeData, NUM_BLOCKS, free_double, 0);
                 node->double_indirect_offset = free_double;
+                printf("Find first free double indirect: %d\n", free_double);
             }
 
             // Open double indirection block
@@ -883,6 +884,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     
                     setNbit(curFreeData, NUM_BLOCKS, free_single, 0);
                     double_indir_block[double_index] = free_single;
+                    printf("Find first free single indirect: %d\n", free_single);
                 }
                 // Set the double indirection block and index
                 if (block_read(double_indir_block[double_index], current_double_block) < 0){
@@ -903,6 +905,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 current_double_block[double_offset] = block;
                 setNbit(curFreeData, NUM_BLOCKS, block, 0);
                 new_block = 1;
+                printf("Find first free double indirect: %d\n", block);
             }
             else{
                 block = current_double_block[double_offset];
