@@ -763,7 +763,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
         // If writing current block requires a new block, grab first free block to be used
         uint8_t new_block = 0;
-        uint16_t block;
+        int block;
         int double_index = (cur_block - 10 - BLOCK_SIZE) / (BLOCK_SIZE / 2);
         int double_offset = (cur_block - 10 - BLOCK_SIZE) % (BLOCK_SIZE / 2);
 
@@ -824,6 +824,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
+                    for (int i = 0; i < NUM_BLOCKS / 8; i++){
+                        printf("%d\n", curFreeData[i]);
+                    }
                     return bytes_written;
                 }
                 single_indirect_block[cur_block - 10] = block;
@@ -859,7 +862,6 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     return bytes_written;
                 }
                 // printf("!write double indirect open\n");
-                double_indir_open = 1;
             }
 
             // Check if in the correct double indirection block
@@ -919,7 +921,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
             return bytes_written;
         }
 
-        // printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
+        printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
         // Calculate the number of blocks to be written on this write
         int this_write = 0;
         if (bytes_left + block_offset >= BLOCK_SIZE)
