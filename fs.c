@@ -655,8 +655,8 @@ int fs_read(int fd, void *buf, size_t nbyte){
 
         // Calculate the block number (mainly for indirection purposes)
         int block;
-        int double_index = (cur_block - 10 - BLOCK_SIZE) / BLOCK_SIZE;
-        // int double_offset = (cur_block - 10 - BLOCK_SIZE) % BLOCK_SIZE;
+        int double_index = (cur_block - 10 - BLOCK_SIZE) / (BLOCK_SIZE / 2);
+        int double_offset = (cur_block - 10 - BLOCK_SIZE) % (BLOCK_SIZE / 2);
         // Case 1: Direct block number, just use regular index
         if (cur_block < 10)
             block = node->direct_offset[cur_block];
@@ -696,7 +696,7 @@ int fs_read(int fd, void *buf, size_t nbyte){
                 current_open_double = double_index;
                 // printf("!read double single indirect open\n");
             }
-            block = current_double_block[double_index];
+            block = current_double_block[double_offset];
         }
         else{
             printf("ERROR: Idk how you got here\n");
@@ -709,6 +709,8 @@ int fs_read(int fd, void *buf, size_t nbyte){
             return -1;
         }
         
+        printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
+
         // Set the buffer size to be read from the file
         int read_size = 0;
         if (block_offset + bytes_left >= BLOCK_SIZE)    // If enough bytes left to read into next block
@@ -762,8 +764,8 @@ int fs_write(int fd, void *buf, size_t nbyte){
         // If writing current block requires a new block, grab first free block to be used
         uint8_t new_block = 0;
         uint16_t block;
-        int double_index = (cur_block - 10 - BLOCK_SIZE) / BLOCK_SIZE;
-        // int double_offset = (cur_block - 10 - BLOCK_SIZE) % BLOCK_SIZE;
+        int double_index = (cur_block - 10 - BLOCK_SIZE) / (BLOCK_SIZE / 2);
+        int double_offset = (cur_block - 10 - BLOCK_SIZE) % (BLOCK_SIZE / 2);
 
         if (node->file_size == 0 || node->file_size <= (BLOCK_SIZE * (cur_block))){
             new_block = 1;
@@ -888,16 +890,21 @@ int fs_write(int fd, void *buf, size_t nbyte){
             }
 
             // Now have the single indirection block, so find block number
-            if (new_block){
+            if (current_double_block[double_offset] == 0){
                 block = find1stFree(curFreeData, NUM_BLOCKS);
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
                 }
-                current_double_block[double_index] = block;
+                current_double_block[double_offset] = block;
                 setNbit(curFreeData, NUM_BLOCKS, block, 0);
+                new_block = 1;
             }
+            else{
+                block = current_double_block[double_offset];
+            }
+
             // If next double block will be different, save the single indirection block
             if (current_open_double != ((cur_block + 1 - 10 - BLOCK_SIZE) / BLOCK_SIZE)){
                 if (block_write(double_indir_block[current_open_double], current_double_block) < 0){
@@ -905,15 +912,13 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     return bytes_written;
                 }
             }
-            else
-                block = current_double_block[double_index];
         }
         else {
             printf("ERROR: Reached maximum file size\n");
             return bytes_written;
         }
 
-        // printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
+        printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
         // Calculate the number of blocks to be written on this write
         int this_write = 0;
         if (bytes_left + block_offset >= BLOCK_SIZE)
@@ -991,7 +996,7 @@ int fs_listfiles(char ***files){
         }
     }
     // Set last value to be NULL
-    *files[curNum] = NULL;
+    files[curNum] = NULL;
 
     if (curNum == 0)
         printf("No files found\n");
