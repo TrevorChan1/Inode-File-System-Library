@@ -982,6 +982,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     return bytes_written;
                 }
             }
+            memcpy(buf + bytes_written, NULL, 1);
         }
     }
 

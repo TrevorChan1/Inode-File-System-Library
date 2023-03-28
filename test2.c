@@ -24,6 +24,7 @@ int main(){
         }
         printf("Close: %d\n", fs_close(fd));
         printf("Unmount: %d\n", umount_fs("test_fs"));
+        return 0;
     }
     else{
         waitpid(m, 0, 0);
