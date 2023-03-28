@@ -264,7 +264,7 @@ int mount_fs(const char *disk_name){
     memcpy(curFreeInodes, block_buf, 8 * sizeof(uint8_t));
 
     // 5. Load data free bitmap based on superblock
-    uint8_t * curFreeData = (uint8_t *) malloc(DISK_BLOCKS / 8 * sizeof(uint8_t));
+    curFreeData = (uint8_t *) malloc(DISK_BLOCKS / 8 * sizeof(uint8_t));
     if (block_read(block_freedata, block_buf) < 0){
         printf("ERROR: Failed to load free data bitmap\n");
         return -1;
@@ -727,8 +727,6 @@ int fs_read(int fd, void *buf, size_t nbyte){
             block_offset = 0;
         cur_block++;
     }
-    // Set the next byte to \0
-    memcpy(buf + bytes_read, "\0", 1);
     fileDescriptors[fd].file_offset += bytes_read;
     return bytes_read;
 }
