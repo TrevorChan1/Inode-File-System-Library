@@ -5,7 +5,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define NUM_BLOCKS 8192
 #define MAX_NUM_FILES 64
 #define MAX_OPEN_FILES 32
 
@@ -178,17 +177,17 @@ int make_fs(const char *disk_name){
     }
 
     // 5. Data free bitmap and initialize to ones (except for what's used for bitmaps and superblock)
-    curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
-    for (int i = 5; i < NUM_BLOCKS; i++){
-        setNbit(curFreeData, NUM_BLOCKS, i, 1);
+    curFreeData = (uint8_t *) malloc(DISK_BLOCKS / 8 * sizeof(uint8_t));
+    for (int i = 5; i < DISK_BLOCKS; i++){
+        setNbit(curFreeData, DISK_BLOCKS, i, 1);
     }
 
     for (int j = 0; j < 5; j++){
-        setNbit(curFreeData, NUM_BLOCKS, j, 0);
+        setNbit(curFreeData, DISK_BLOCKS, j, 0);
     }
 
     memset(block_buf, 0, sizeof(block_buf));
-    memcpy(block_buf, curFreeData, NUM_BLOCKS / 8 * sizeof(uint8_t));
+    memcpy(block_buf, curFreeData, DISK_BLOCKS / 8 * sizeof(uint8_t));
     if (block_write(2, block_buf) != 0){
         printf("ERROR: Failed to write data free bitmap to disk\n");
         return -1;
@@ -265,12 +264,12 @@ int mount_fs(const char *disk_name){
     memcpy(curFreeInodes, block_buf, 8 * sizeof(uint8_t));
 
     // 5. Load data free bitmap based on superblock
-    uint8_t * curFreeData = (uint8_t *) malloc(NUM_BLOCKS / 8 * sizeof(uint8_t));
+    uint8_t * curFreeData = (uint8_t *) malloc(DISK_BLOCKS / 8 * sizeof(uint8_t));
     if (block_read(block_freedata, block_buf) < 0){
         printf("ERROR: Failed to load free data bitmap\n");
         return -1;
     }
-    memcpy(curFreeData, block_buf, NUM_BLOCKS / 8 * sizeof(uint8_t));
+    memcpy(curFreeData, block_buf, DISK_BLOCKS / 8 * sizeof(uint8_t));
 
     // 6. Initialize all file descriptors to closed and offset 0
     for (int i = 0; i < MAX_OPEN_FILES; i++){
@@ -300,7 +299,7 @@ int umount_fs(const char *disk_name){
 
     // Free data bitmap, then free allocated memory
     memset(block_buf, 0, sizeof(block_buf));
-    memcpy(block_buf, curFreeData, NUM_BLOCKS / 8 * sizeof(uint8_t));
+    memcpy(block_buf, curFreeData, DISK_BLOCKS / 8 * sizeof(uint8_t));
     if (block_write(2, block_buf) != 0){
         printf("ERROR: Failed to write data free bitmap to disk\n");
         return -1;
@@ -556,7 +555,7 @@ int fs_delete(const char *name){
 
     // Free all direct offsets
     for (int i = 0; i < num_direct; i++){
-        setNbit(curFreeData, NUM_BLOCKS, curTable[inum].direct_offset[i], 1);
+        setNbit(curFreeData, DISK_BLOCKS, curTable[inum].direct_offset[i], 1);
         curTable[inum].direct_offset[i] = 0;
     }
 
@@ -569,11 +568,11 @@ int fs_delete(const char *name){
 
         int index = 0;
         while ((index < BLOCK_SIZE/2) && (single_indir_block[index] != 0)){
-            setNbit(curFreeData, NUM_BLOCKS, single_indir_block[index], 1);
+            setNbit(curFreeData, DISK_BLOCKS, single_indir_block[index], 1);
             index++;
         }
         // Free the single indirection offset value
-        setNbit(curFreeData, NUM_BLOCKS, curTable[inum].single_indirect_offset, 1);
+        setNbit(curFreeData, DISK_BLOCKS, curTable[inum].single_indirect_offset, 1);
     }
     
     // Free all double indirection offsets (if there are any)
@@ -592,18 +591,18 @@ int fs_delete(const char *name){
             int single_index = 0;
             // Free each block in each value of the double indirection block (and the blocks that hold them)
             while ((single_index < BLOCK_SIZE/2) && (current_double_block[single_index] != 0)){
-                setNbit(curFreeData, NUM_BLOCKS, current_double_block[single_index], 1);
+                setNbit(curFreeData, DISK_BLOCKS, current_double_block[single_index], 1);
                 single_index++;
             }
             
             // Free the single indirection block that was just iterated through
-            setNbit(curFreeData, NUM_BLOCKS, double_indir_block[double_index], 1);
+            setNbit(curFreeData, DISK_BLOCKS, double_indir_block[double_index], 1);
             double_index++;
 
         }
 
         // Free the double indirection offset value
-        setNbit(curFreeData, NUM_BLOCKS, curTable[inum].double_indirect_offset, 1);
+        setNbit(curFreeData, DISK_BLOCKS, curTable[inum].double_indirect_offset, 1);
     }
 
     
@@ -764,8 +763,8 @@ int fs_write(int fd, void *buf, size_t nbyte){
         // If writing current block requires a new block, grab first free block to be used
         uint8_t new_block = 0;
         int block;
-        int double_index = (cur_block - 10 - BLOCK_SIZE) / (BLOCK_SIZE / 2);
-        int double_offset = (cur_block - 10 - BLOCK_SIZE) % (BLOCK_SIZE / 2);
+        int double_index = (cur_block - 10 - BLOCK_SIZE/2) / (BLOCK_SIZE / 2);
+        int double_offset = (cur_block - 10 - BLOCK_SIZE/2) % (BLOCK_SIZE / 2);
 
         if (node->file_size == 0 || (node->file_size <= (BLOCK_SIZE * (cur_block)))){
             new_block = 1;
@@ -776,14 +775,14 @@ int fs_write(int fd, void *buf, size_t nbyte){
         // Case 1: Direct, if new block allocate but otherwise just set to next one in direct
         if (cur_block < 10){
             if (new_block){
-                block = find1stFree(curFreeData, NUM_BLOCKS);
+                block = find1stFree(curFreeData, DISK_BLOCKS);
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
                 }
                 node->direct_offset[cur_block] = block;
-                setNbit(curFreeData, NUM_BLOCKS, block, 0);
+                setNbit(curFreeData, DISK_BLOCKS, block, 0);
             }
             else
                 block = node->direct_offset[cur_block];
@@ -793,7 +792,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
             // Create indirect block if not already set and update metadata
             if (node->single_indirect_offset == 0){
-                int indir_block = find1stFree(curFreeData, NUM_BLOCKS);
+                int indir_block = find1stFree(curFreeData, DISK_BLOCKS);
                 if (indir_block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
@@ -804,7 +803,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     printf("ERROR: Failed to initialize single indirection block\n");
                     return bytes_written;
                 }
-                setNbit(curFreeData, NUM_BLOCKS, indir_block, 0);
+                setNbit(curFreeData, DISK_BLOCKS, indir_block, 0);
                 node->single_indirect_offset = indir_block;
             }
             
@@ -820,14 +819,14 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
             // Repeat code but done so that will only find 1st free block if had space to create indirect
             if (new_block){
-                block = find1stFree(curFreeData, NUM_BLOCKS);
+                block = find1stFree(curFreeData, DISK_BLOCKS);
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
                 }
                 single_indirect_block[cur_block - 10] = block;
-                setNbit(curFreeData, NUM_BLOCKS, block, 0);
+                setNbit(curFreeData, DISK_BLOCKS, block, 0);
             }
             else
                 block = single_indirect_block[cur_block - 10];
@@ -837,7 +836,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
             // Create double indirection block
             if (node->double_indirect_offset == 0){
-                int free_double = find1stFree(curFreeData, NUM_BLOCKS);
+                int free_double = find1stFree(curFreeData, DISK_BLOCKS);
                 if (free_double < 0){
                     printf("ERROR: Not enough disk space to allocate double block\n");
                     return bytes_written;
@@ -848,9 +847,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     printf("ERROR: Failed to write double indirection to disk\n");
                     return bytes_written;
                 }
-                setNbit(curFreeData, NUM_BLOCKS, free_double, 0);
+                setNbit(curFreeData, DISK_BLOCKS, free_double, 0);
                 node->double_indirect_offset = free_double;
-                printf("Find first free double indirect: %d\n", free_double);
+                // printf("Find first free double indirect: %d\n", free_double);
             }
 
             // Open double indirection block
@@ -867,7 +866,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
             if (double_index != current_open_double || (current_open_double == -1)){
                 // If single indir block in double indirection block isn't made, initialize it
                 if (double_indir_block[double_index] == 0){
-                    int free_single = find1stFree(curFreeData, NUM_BLOCKS);
+                    int free_single = find1stFree(curFreeData, DISK_BLOCKS);
                     if (free_single < 0){
                         printf("ERROR: Not enough disk space to write indirection block\n");
                         return bytes_written;
@@ -880,9 +879,9 @@ int fs_write(int fd, void *buf, size_t nbyte){
                         return bytes_written;
                     }
                     
-                    setNbit(curFreeData, NUM_BLOCKS, free_single, 0);
+                    setNbit(curFreeData, DISK_BLOCKS, free_single, 0);
                     double_indir_block[double_index] = free_single;
-                    printf("Find first free single indirect: %d\n", free_single);
+                    // printf("Find first free single indirect: %d\n", free_single);
                 }
                 // Set the double indirection block and index
                 if (block_read(double_indir_block[double_index], current_double_block) < 0){
@@ -893,16 +892,16 @@ int fs_write(int fd, void *buf, size_t nbyte){
 
             // Now have the single indirection block, so find block number
             if (current_double_block[double_offset] == 0){
-                block = find1stFree(curFreeData, NUM_BLOCKS);
+                block = find1stFree(curFreeData, DISK_BLOCKS);
                 // If full, return bytes_written (number of bytes currently written to disk)
                 if (block < 0){
                     printf("ERROR: Disk is full\n");
                     return bytes_written;
                 }
                 current_double_block[double_offset] = block;
-                setNbit(curFreeData, NUM_BLOCKS, block, 0);
+                setNbit(curFreeData, DISK_BLOCKS, block, 0);
                 new_block = 1;
-                printf("Find first free double indirect: %d\n", block);
+                // printf("Find first free double indirect: %d\n", block);
             }
             else{
                 block = current_double_block[double_offset];
@@ -921,7 +920,7 @@ int fs_write(int fd, void *buf, size_t nbyte){
             return bytes_written;
         }
 
-        printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
+        // printf("Cur block: %d Block: %d Offset: %d\n", cur_block, block, fileDescriptors[fd].file_offset);
         // Calculate the number of blocks to be written on this write
         int this_write = 0;
         if (bytes_left + block_offset >= BLOCK_SIZE)
@@ -1113,7 +1112,7 @@ int fs_truncate(int fd, off_t length){
     for (int i = block_start; i < block_start + blocks_delete; i++){
         // Case 1: Direct offset
         if (i < 10){
-            setNbit(curFreeData, NUM_BLOCKS, node->direct_offset[i], 1);
+            setNbit(curFreeData, DISK_BLOCKS, node->direct_offset[i], 1);
             node->direct_offset[i] = 0;
         }
         // Case 2: Single indirect offset
@@ -1125,7 +1124,7 @@ int fs_truncate(int fd, off_t length){
                     return -1;
                 }
             }
-            setNbit(curFreeData, NUM_BLOCKS, single_indir_block[i - 10], 1);
+            setNbit(curFreeData, DISK_BLOCKS, single_indir_block[i - 10], 1);
             single_indir_block[i - 10] = 0;
         }
     }
