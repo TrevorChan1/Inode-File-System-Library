@@ -727,6 +727,8 @@ int fs_read(int fd, void *buf, size_t nbyte){
             block_offset = 0;
         cur_block++;
     }
+    // Set the next byte to \0
+    memcpy(buf + bytes_read, "\0", 1);
     fileDescriptors[fd].file_offset += bytes_read;
     return bytes_read;
 }
@@ -982,7 +984,6 @@ int fs_write(int fd, void *buf, size_t nbyte){
                     return bytes_written;
                 }
             }
-            memcpy(buf + bytes_written, NULL, 1);
         }
     }
 
